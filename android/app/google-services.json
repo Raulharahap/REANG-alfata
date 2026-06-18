@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "703588825307",
+    "project_id": "reang-app",
+    "storage_bucket": "reang-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:703588825307:android:f52b18a20336eb148df4fe",
+        "android_client_info": {
+          "package_name": "com.example.reang_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "703588825307-o997igjgnciu5ivfoh3380uv71mn694r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.reang_app",
+            "certificate_hash": "1f73859deed85b9d49aaae14aaf353d70d31dc31"
+          }
+        },
+        {
+          "client_id": "703588825307-l90opqjg6ksp50683jd9kf99uhl7803a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD98Q4tECHd8C0jdzyyJ4S94yD3WUEhDPU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "703588825307-l90opqjg6ksp50683jd9kf99uhl7803a.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "703588825307-r5nn2bbthdv2mll48agv7el0cstvvkra.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.reangApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

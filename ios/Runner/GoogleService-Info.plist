@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>703588825307-r5nn2bbthdv2mll48agv7el0cstvvkra.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.703588825307-r5nn2bbthdv2mll48agv7el0cstvvkra</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>703588825307-o997igjgnciu5ivfoh3380uv71mn694r.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyD-pl-nJI0huy-kHUq5w2rJoXpR2wCmcJE</string>
+	<key>GCM_SENDER_ID</key>
+	<string>703588825307</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.reangApp</string>
+	<key>PROJECT_ID</key>
+	<string>reang-app</string>
+	<key>STORAGE_BUCKET</key>
+	<string>reang-app.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:703588825307:ios:17a1ad4d63db4cc08df4fe</string>
+</dict>
+</plist>
