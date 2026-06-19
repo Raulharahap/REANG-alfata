@@ -307,8 +307,11 @@ class _DetailTiketUserScreenState extends State<DetailTiketUserScreen> {
                   itemCount: _allImages.length,
                   itemBuilder: (context, index) {
                     return Image.network(
-                      _getImageUrl(_allImages[index]),
+                      _allImages[index], // Panggil langsung tanpa fungsi tambahan!
                       fit: BoxFit.cover,
+                      headers: const {
+                        'ngrok-skip-browser-warning': 'true',
+                      }, // Wajib ada untuk ngrok
                       errorBuilder: (c, e, s) => Container(
                         color: Colors.grey.shade200,
                         child: const Icon(

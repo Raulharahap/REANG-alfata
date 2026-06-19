@@ -9,7 +9,7 @@ import 'package:flutter_styled_toast/flutter_styled_toast.dart';
 // Import Form
 import 'form_input_event.dart';
 import 'form_input_wisata.dart';
-// Import Detail (Akan kita buat setelah ini)
+// Import Detail
 import 'detail_wisata_mitra_screen.dart';
 import 'detail_event_mitra_screen.dart';
 
@@ -75,11 +75,15 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
     return combined;
   }
 
-  String _getImageUrl(String? path) {
-    if (path == null || path.isEmpty) return '';
+  // JARING PENGAMAN URL (Cerdas mendeteksi link utuh atau path relatif)
+  String _getSmartImageUrl(String? url) {
+    if (url == null || url.isEmpty) return '';
+    if (url.startsWith('http')) return url; // Jika dari Laravel sudah lengkap
+
+    // Ganti domain ini jika ngrok kamu mati/berubah
     const String domainHost =
         'https://c4eb-2402-8780-103b-abc-d45e-c0c5-b397-1bce.ngrok-free.app';
-    return '$domainHost/storage/$path';
+    return '$domainHost/storage/$url';
   }
 
   @override
@@ -156,8 +160,9 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                     ),
                     selected: isSelected,
                     onSelected: (selected) {
-                      if (selected)
+                      if (selected) {
                         setState(() => _selectedFilterIndex = index);
+                      }
                     },
                     selectedColor: const Color(0xFF005691),
                     backgroundColor: Colors.white,
@@ -191,6 +196,7 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                         horizontal: 20,
                         vertical: 8,
                       ),
+                      physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: items.length,
                       itemBuilder: (context, index) {
                         final item = items[index];
@@ -204,7 +210,6 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
     );
   }
 
-  // Desain Card List yang Elegan
   // Desain Card List yang Elegan (Vertical Full Width)
   Widget _buildItemCard(dynamic item) {
     final bool isWisata = item is TiketWisataModel;
@@ -212,7 +217,9 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
     final String title = isWisata ? item.namaWisata : item.namaEvent;
     final String location = isWisata ? item.alamat : item.lokasi;
     final String category = isWisata ? item.kategoriWisata : item.kategoriEvent;
-    final String imageUrl = _getImageUrl(item.fotoUtamaUrl);
+
+    // Gunakan fungsi URL Cerdas Anti-Error
+    final String finalImageUrl = _getSmartImageUrl(item.fotoUtamaUrl);
     final String status = item.isActive ? "Aktif" : "Non-Aktif";
 
     // Ambil info spesifik (Harga untuk Wisata, Tanggal untuk Event)
@@ -267,8 +274,13 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: Image.network(
-                    imageUrl,
+                    finalImageUrl,
                     fit: BoxFit.cover,
+                    headers: const {'ngrok-skip-browser-warning': 'true'},
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(child: CircularProgressIndicator());
+                    },
                     errorBuilder: (c, e, s) => Container(
                       color: Colors.grey.shade200,
                       child: const Icon(

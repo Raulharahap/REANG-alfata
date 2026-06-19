@@ -19,13 +19,6 @@ class _DetailEventMitraScreenState extends State<DetailEventMitraScreen> {
   final ApiService _apiService = ApiService();
   bool _isDeleting = false;
 
-  String _getImageUrl(String? path) {
-    if (path == null || path.isEmpty) return '';
-    const String domainHost =
-        'https://c4eb-2402-8780-103b-abc-d45e-c0c5-b397-1bce.ngrok-free.app';
-    return '$domainHost/storage/$path';
-  }
-
   void _showToast(String message, {bool isError = false}) {
     showToast(
       message,
@@ -71,11 +64,12 @@ class _DetailEventMitraScreenState extends State<DetailEventMitraScreen> {
           eventId: widget.event.id!,
         );
         _showToast("Event berhasil dihapus!");
-        if (mounted)
+        if (mounted) {
           Navigator.pop(
             context,
             true,
           ); // Sinyal true agar list ter-refresh otomatis
+        }
       } catch (e) {
         _showToast(e.toString().replaceAll('Exception: ', ''), isError: true);
       } finally {
@@ -116,11 +110,12 @@ class _DetailEventMitraScreenState extends State<DetailEventMitraScreen> {
                   builder: (context) => FormInputEvent(event: event),
                 ),
               );
-              if (result == true)
+              if (result == true) {
                 Navigator.pop(
                   context,
                   true,
                 ); // Teruskan perintah refresh jika form sukses mengupdate data
+              }
             },
             icon: const Icon(Icons.edit, color: Colors.white),
             label: const Text(
@@ -152,8 +147,13 @@ class _DetailEventMitraScreenState extends State<DetailEventMitraScreen> {
                     height: 240,
                     color: Colors.grey.shade200,
                     child: Image.network(
-                      _getImageUrl(event.fotoUtamaUrl),
+                      event.fotoUtamaUrl ?? '',
                       fit: BoxFit.cover,
+                      headers: const {'ngrok-skip-browser-warning': 'true'},
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(child: CircularProgressIndicator());
+                      },
                       errorBuilder: (c, e, s) => const Icon(
                         Icons.broken_image,
                         size: 50,
@@ -381,8 +381,23 @@ class _DetailEventMitraScreenState extends State<DetailEventMitraScreen> {
                                   ),
                                   clipBehavior: Clip.antiAlias,
                                   child: Image.network(
-                                    _getImageUrl(event.galeri[index].fotoUrl),
+                                    event.galeri[index].fotoUrl ?? '',
                                     fit: BoxFit.cover,
+                                    headers: const {
+                                      'ngrok-skip-browser-warning': 'true',
+                                    },
+                                    loadingBuilder:
+                                        (context, child, loadingProgress) {
+                                          if (loadingProgress == null)
+                                            return child;
+                                          return const Center(
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          );
+                                        },
+                                    errorBuilder: (c, e, s) =>
+                                        const Icon(Icons.broken_image),
                                   ),
                                 );
                               },

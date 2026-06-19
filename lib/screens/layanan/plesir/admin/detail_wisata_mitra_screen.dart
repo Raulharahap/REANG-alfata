@@ -20,13 +20,6 @@ class _DetailWisataMitraScreenState extends State<DetailWisataMitraScreen> {
   final ApiService _apiService = ApiService();
   bool _isDeleting = false;
 
-  String _getImageUrl(String? path) {
-    if (path == null || path.isEmpty) return '';
-    const String domainHost =
-        'https://c4eb-2402-8780-103b-abc-d45e-c0c5-b397-1bce.ngrok-free.app';
-    return '$domainHost/storage/$path';
-  }
-
   void _showToast(String message, {bool isError = false}) {
     showToast(
       message,
@@ -155,8 +148,13 @@ class _DetailWisataMitraScreenState extends State<DetailWisataMitraScreen> {
                     height: 240,
                     color: Colors.grey.shade200,
                     child: Image.network(
-                      _getImageUrl(wisata.fotoUtamaUrl),
+                      wisata.fotoUtamaUrl ?? '',
                       fit: BoxFit.cover,
+                      headers: const {'ngrok-skip-browser-warning': 'true'},
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(child: CircularProgressIndicator());
+                      },
                       errorBuilder: (c, e, s) => const Icon(
                         Icons.broken_image,
                         size: 50,
@@ -332,8 +330,25 @@ class _DetailWisataMitraScreenState extends State<DetailWisataMitraScreen> {
                                   ),
                                   clipBehavior: Clip.antiAlias,
                                   child: Image.network(
-                                    _getImageUrl(wisata.galeri[index].fotoUrl),
+                                    wisata.galeri[index].fotoUrl,
                                     fit: BoxFit.cover,
+                                    headers: const {
+                                      'ngrok-skip-browser-warning': 'true',
+                                    },
+                                    loadingBuilder:
+                                        (context, child, loadingProgress) {
+                                          if (loadingProgress == null)
+                                            return child;
+                                          return const Center(
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          );
+                                        },
+                                    errorBuilder: (c, e, s) => const Icon(
+                                      Icons.broken_image,
+                                      color: Colors.grey,
+                                    ),
                                   ),
                                 );
                               },

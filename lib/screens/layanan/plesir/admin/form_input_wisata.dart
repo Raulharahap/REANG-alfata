@@ -107,13 +107,6 @@ class _FormInputWisataState extends State<FormInputWisata> {
     super.dispose();
   }
 
-  String _getImageUrl(String? path) {
-    if (path == null || path.isEmpty) return '';
-    const String domainHost =
-        'https://c4eb-2402-8780-103b-abc-d45e-c0c5-b397-1bce.ngrok-free.app';
-    return '$domainHost/storage/$path';
-  }
-
   // --- Fungsi Foto ---
   Future<void> _pickFotoUtama() async {
     try {
@@ -215,8 +208,9 @@ class _FormInputWisataState extends State<FormInputWisata> {
 
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         _showToast(e.toString().replaceAll('Exception: ', ''), isError: true);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -572,10 +566,18 @@ class _FormInputWisataState extends State<FormInputWisata> {
                 ? Image.file(File(_fotoUtama!.path), fit: BoxFit.cover)
                 : (_fotoUtamaLamaUrl != null
                       ? Image.network(
-                          _getImageUrl(_fotoUtamaLamaUrl),
+                          _fotoUtamaLamaUrl ?? '',
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) =>
-                              const Icon(Icons.broken_image),
+                          headers: const {'ngrok-skip-browser-warning': 'true'},
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          },
+                          errorBuilder: (c, e, s) => const Center(
+                            child: Icon(Icons.broken_image, color: Colors.grey),
+                          ),
                         )
                       : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -676,8 +678,26 @@ class _FormInputWisataState extends State<FormInputWisata> {
                         ),
                         child: isFotoLama
                             ? Image.network(
-                                _getImageUrl(_galeriFotoLama[index].fotoUrl),
+                                _galeriFotoLama[index].fotoUrl ?? '',
                                 fit: BoxFit.cover,
+                                headers: const {
+                                  'ngrok-skip-browser-warning': 'true',
+                                },
+                                loadingBuilder:
+                                    (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return const Center(
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      );
+                                    },
+                                errorBuilder: (c, e, s) => const Center(
+                                  child: Icon(
+                                    Icons.broken_image,
+                                    color: Colors.grey,
+                                  ),
+                                ),
                               )
                             : Image.file(
                                 File(

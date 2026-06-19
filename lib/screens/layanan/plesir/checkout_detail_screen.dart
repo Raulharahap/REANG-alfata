@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Jika error, pastikan package intl terinstall: flutter pub add intl
+import 'package:intl/intl.dart';
 import 'instruksi_checkout_screen.dart';
 
 class CheckoutDetailScreen extends StatefulWidget {
   final String title;
   final String location;
-  final String
-  price; // Diterima dalam bentuk string, misal: "Rp 50000" atau "50000"
+  final String price;
   final String imageUrl;
 
   const CheckoutDetailScreen({
@@ -27,6 +26,18 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
   // --- STATE DINAMIS ---
   int _ticketCount = 1;
   DateTime? _visitDate;
+
+  // Fungsi pintar untuk memastikan URL gambar selalu valid
+  String _getValidImageUrl(String path) {
+    if (path.isEmpty) return '';
+    // Jika path sudah berupa link internet lengkap, langsung pakai
+    if (path.startsWith('http')) return path;
+
+    // Jika berupa path mentah dari database, tambahkan domain backend
+    const String domainHost =
+        'https://c4eb-2402-8780-103b-abc-d45e-c0c5-b397-1bce.ngrok-free.app';
+    return '$domainHost/storage/$path';
+  }
 
   // Fungsi untuk ekstrak angka dari string harga (misal "Rp 50.000" jadi 50000)
   int get _basePrice {
@@ -151,23 +162,49 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: Image.network(
-                          widget.imageUrl,
-                          width: 80,
-                          height: 80,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                width: 80,
-                                height: 80,
-                                color: Colors.grey[200],
-                                child: const Icon(
-                                  Icons.image,
+                      // CONTAINER GAMBAR YANG LEBIH TAHAN BANTING
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.network(
+                            _getValidImageUrl(
+                              widget.imageUrl,
+                            ), // Menggunakan helper pembersih URL
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                            // 👇 INI OBATNYA AGAR NGROK TIDAK ERROR 403 👇
+                            headers: const {
+                              'ngrok-skip-browser-warning': 'true',
+                            },
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  value:
+                                      loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                            loadingProgress.expectedTotalBytes!
+                                      : null,
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Center(
+                                child: Icon(
+                                  Icons.broken_image,
                                   color: Colors.grey,
                                 ),
-                              ),
+                              );
+                            },
+                          ),
                         ),
                       ),
                       const SizedBox(width: 16),

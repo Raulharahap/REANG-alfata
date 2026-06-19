@@ -42,14 +42,6 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     }
   }
 
-  // Helper untuk mendapatkan URL gambar dari Laravel Storage
-  String _getImageUrl(String? path) {
-    if (path == null || path.isEmpty) return '';
-    const String domainHost =
-        'https://7fed-2402-8780-103b-abc-e96b-4656-8be8-8a62.ngrok-free.app';
-    return '$domainHost/storage/$path';
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -101,7 +93,12 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                         backgroundColor: Colors.grey[200],
                         // Jika ada foto pakai NetworkImage, jika tidak biarkan null agar transparan
                         backgroundImage: hasFoto
-                            ? NetworkImage(_getImageUrl(_mitraData!.foto))
+                            ? NetworkImage(
+                                _mitraData!.foto ?? '',
+                                headers: const {
+                                  'ngrok-skip-browser-warning': 'true',
+                                },
+                              )
                             : null,
                         // Menampilkan icon kosongan jika foto tidak ada
                         child: !hasFoto

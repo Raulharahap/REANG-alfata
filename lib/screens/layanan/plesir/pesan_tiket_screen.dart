@@ -293,7 +293,7 @@ class _PesanTiketScreenState extends State<PesanTiketScreen> {
     final String title = isWisata ? item.namaWisata : item.namaEvent;
     final String location = isWisata ? item.alamat : item.lokasi;
     final String category = isWisata ? item.kategoriWisata : item.kategoriEvent;
-    final String imageUrl = _getImageUrl(item.fotoUtamaUrl);
+    final String imageUrl = item.fotoUtamaUrl ?? '';
 
     // Menentukan teks harga
     String priceText = "";
@@ -382,6 +382,26 @@ class _PesanTiketScreenState extends State<PesanTiketScreen> {
                       height: 180,
                       width: double.infinity,
                       fit: BoxFit.cover,
+                      // 👇 INI OBATNYA AGAR NGROK TIDAK ERROR 403 👇
+                      headers: const {'ngrok-skip-browser-warning': 'true'},
+                      // Tambahan animasi loading agar UI lebih premium saat koneksi lambat
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          height: 180,
+                          width: double.infinity,
+                          color: Colors.grey[100],
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          ),
+                        );
+                      },
                       errorBuilder: (context, error, stackTrace) => Container(
                         height: 180,
                         width: double.infinity,

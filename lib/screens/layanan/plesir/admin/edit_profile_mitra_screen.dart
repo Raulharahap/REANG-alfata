@@ -102,14 +102,6 @@ class _EditProfileMitraScreenState extends State<EditProfileMitraScreen> {
     }
   }
 
-  // Helper URL Gambar
-  String _getImageUrl(String? path) {
-    if (path == null || path.isEmpty) return '';
-    const String domainHost =
-        'https://7fed-2402-8780-103b-abc-e96b-4656-8be8-8a62.ngrok-free.app';
-    return '$domainHost/storage/$path';
-  }
-
   @override
   Widget build(BuildContext context) {
     final hasExistingFoto =
@@ -156,7 +148,10 @@ class _EditProfileMitraScreenState extends State<EditProfileMitraScreen> {
                                 image: _imageFile != null
                                     ? FileImage(_imageFile!) as ImageProvider
                                     : NetworkImage(
-                                        _getImageUrl(widget.mitraData.foto),
+                                        widget.mitraData.foto ?? '',
+                                        headers: const {
+                                          'ngrok-skip-browser-warning': 'true',
+                                        },
                                       ),
                               )
                             : null,
