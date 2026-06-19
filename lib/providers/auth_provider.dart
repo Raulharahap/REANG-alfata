@@ -95,6 +95,18 @@ class AuthProvider with ChangeNotifier {
     return false;
   }
 
+  bool get isAdminPlesir {
+    // Cek dari state saat ini
+    if (_role == 'adminplesir') return true;
+    // Cek mendalam jika _role masih 'user' (untuk kasus multi-role)
+    if (_currentUser is UserModel) {
+      return (_currentUser as UserModel).role.any(
+        (r) => r.name == 'adminplesir',
+      );
+    }
+    return false;
+  }
+
   // ------------------------------------
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'], // <--- JANGAN LUPA KOMA DI SINI
@@ -332,6 +344,34 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<void> upgradeToAdminPlesir() async {
+    if (_currentUser is UserModel && !isAdminPlesir) {
+      final user = _currentUser as UserModel;
+
+      // 1. Buat data role 'adminplesir' baru
+      // Catatan: Pastikan ID 3 sesuai dengan ID role 'adminplesir' di database kamu
+      final newRole = RoleModel(
+        id: 3,
+        name: 'adminplesir',
+        pivot: PivotModel(userId: user.id, roleId: 3),
+      );
+
+      // 2. Tambahkan role baru ke list di state
+      user.role.add(newRole);
+
+      // 3. Update role utama di provider
+      _role = 'adminplesir';
+
+      // 4. Simpan ulang semua data
+      await _storage.saveUser(user);
+      await _storage.saveRole(_role!);
+
+      // 5. Beri tahu aplikasi
+      notifyListeners();
+      debugPrint("AuthProvider: Role user di-upgrade ke Admin Plesir!");
+    }
+  }
+
   // ============================================================================
   //  [BARU] FUNGSI REFRESH USER PROFILE
   //  Memaksa Provider mengambil ulang data user dari backend dan memperbarui
@@ -370,6 +410,7 @@ class AuthProvider with ChangeNotifier {
   String _getPrimaryRoleFromList(List<RoleModel> roles) {
     if (roles.any((r) => r.name == 'puskesmas')) return 'puskesmas';
     if (roles.any((r) => r.name == 'umkm')) return 'umkm';
+    if (roles.any((r) => r.name == 'adminplesir')) return 'adminplesir';
     if (roles.any((r) => r.name == 'user')) return 'user';
     return roles.isNotEmpty ? roles.first.name : 'user'; // Cadangan
   }

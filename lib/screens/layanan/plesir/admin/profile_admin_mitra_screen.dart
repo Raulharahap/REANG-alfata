@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:reang_app/models/mitra_plesir_model.dart';
+import 'package:reang_app/providers/auth_provider.dart';
+import 'package:reang_app/services/api_service.dart';
+import 'package:reang_app/screens/layanan/plesir/admin/edit_profile_mitra_screen.dart'; // Import halaman edit
 
 class ProviderProfileScreen extends StatefulWidget {
   const ProviderProfileScreen({super.key});
@@ -8,8 +13,62 @@ class ProviderProfileScreen extends StatefulWidget {
 }
 
 class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
+  final ApiService _apiService = ApiService();
+
+  MitraPlesirModel? _mitraData;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfileData();
+  }
+
+  // --- FUNGSI MENGAMBIL DATA PROFIL DARI API ---
+  Future<void> _loadProfileData() async {
+    setState(() => _isLoading = true);
+    try {
+      final token = context.read<AuthProvider>().token;
+      if (token != null) {
+        final data = await _apiService.fetchProfilMitraPlesir(token);
+        setState(() {
+          _mitraData = data;
+        });
+      }
+    } catch (e) {
+      debugPrint("Gagal memuat profil: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Helper untuk mendapatkan URL gambar dari Laravel Storage
+  String _getImageUrl(String? path) {
+    if (path == null || path.isEmpty) return '';
+    const String domainHost =
+        'https://7fed-2402-8780-103b-abc-e96b-4656-8be8-8a62.ngrok-free.app';
+    return '$domainHost/storage/$path';
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF8FAFC),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF0D6EFD)),
+        ),
+      );
+    }
+
+    final namaWisata = _mitraData?.nama ?? 'Nama Wisata';
+    final alamatWisata = _mitraData?.alamat ?? 'Alamat belum diatur';
+    final deskripsiWisata = _mitraData?.deskripsi ?? 'Belum ada deskripsi.';
+    final kontakWisata = _mitraData?.kontak ?? 'Belum ada kontak';
+
+    // Cek apakah punya foto
+    final hasFoto = _mitraData?.foto != null && _mitraData!.foto!.isNotEmpty;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SingleChildScrollView(
@@ -37,11 +96,21 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                           ),
                         ],
                       ),
-                      child: const CircleAvatar(
+                      child: CircleAvatar(
                         radius: 70,
-                        backgroundImage: NetworkImage(
-                          'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=300&q=80',
-                        ),
+                        backgroundColor: Colors.grey[200],
+                        // Jika ada foto pakai NetworkImage, jika tidak biarkan null agar transparan
+                        backgroundImage: hasFoto
+                            ? NetworkImage(_getImageUrl(_mitraData!.foto))
+                            : null,
+                        // Menampilkan icon kosongan jika foto tidak ada
+                        child: !hasFoto
+                            ? const Icon(
+                                Icons.landscape,
+                                size: 60,
+                                color: Colors.grey,
+                              )
+                            : null,
                       ),
                     ),
                     Positioned(
@@ -69,9 +138,10 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
               Center(
                 child: Column(
                   children: [
-                    const Text(
-                      'Indra Tour & Travel',
-                      style: TextStyle(
+                    Text(
+                      namaWisata,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: Colors.black,
@@ -80,16 +150,24 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                     const SizedBox(height: 6),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(
+                      children: [
+                        const Icon(
                           Icons.location_on_outlined,
                           color: Colors.grey,
                           size: 16,
                         ),
-                        SizedBox(width: 4),
-                        Text(
-                          'Indramayu, Jawa Barat',
-                          style: TextStyle(color: Colors.grey, fontSize: 14),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            alamatWisata,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 14,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -103,7 +181,23 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton.icon(
-                  onPressed: () {},
+                  onPressed: () async {
+                    if (_mitraData == null) return;
+
+                    // Navigasi ke halaman Edit Profil
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            EditProfileMitraScreen(mitraData: _mitraData!),
+                      ),
+                    );
+
+                    // Jika result == true (berhasil simpan), reload data profil
+                    if (result == true) {
+                      _loadProfileData();
+                    }
+                  },
                   icon: const Icon(Icons.edit, size: 18, color: Colors.white),
                   label: const Text(
                     'Edit Profil',
@@ -136,7 +230,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
               ),
               const SizedBox(height: 32),
 
-              // --- SECTION 5: INFORMASI BISNIS TITLE ---
+              // --- SECTION 5: INFORMASI BISNIS ---
               const Text(
                 'Informasi Bisnis',
                 style: TextStyle(
@@ -166,7 +260,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                     _buildBusinessItem(
                       icon: Icons.business,
                       label: 'NAMA PENYEDIA',
-                      content: 'Indra Tour & Travel',
+                      content: namaWisata,
                     ),
                     const Divider(height: 1, indent: 70),
                     _buildBusinessItem(
@@ -183,16 +277,21 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                     ),
                     const Divider(height: 1, indent: 70),
                     _buildBusinessItem(
+                      icon: Icons.phone_outlined,
+                      label: 'KONTAK / WHATSAPP',
+                      content: kontakWisata,
+                    ),
+                    const Divider(height: 1, indent: 70),
+                    _buildBusinessItem(
                       icon: Icons.map_outlined,
                       label: 'LOKASI',
-                      content: 'Indramayu, Jawa Barat',
+                      content: alamatWisata,
                     ),
                     const Divider(height: 1, indent: 70),
                     _buildBusinessItem(
                       icon: Icons.description_outlined,
                       label: 'DESKRIPSI',
-                      content:
-                          'Penyedia jasa tur wisata lokal dan organizer event budaya terbaik di Indramayu.',
+                      content: deskripsiWisata,
                     ),
                   ],
                 ),

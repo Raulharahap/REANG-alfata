@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'instruksi_checkout_screen.dart'; // Import halaman instruksi checkout pembeli
+import 'package:intl/intl.dart'; // Jika error, pastikan package intl terinstall: flutter pub add intl
+import 'instruksi_checkout_screen.dart';
 
 class CheckoutDetailScreen extends StatefulWidget {
-  // Tambahkan parameter konstruktor untuk menerima data
   final String title;
   final String location;
-  final String price;
+  final String
+  price; // Diterima dalam bentuk string, misal: "Rp 50000" atau "50000"
   final String imageUrl;
 
   const CheckoutDetailScreen({
@@ -23,10 +24,75 @@ class CheckoutDetailScreen extends StatefulWidget {
 class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
   String _selectedPaymentMethod = 'OVO';
 
+  // --- STATE DINAMIS ---
+  int _ticketCount = 1;
+  DateTime? _visitDate;
+
+  // Fungsi untuk ekstrak angka dari string harga (misal "Rp 50.000" jadi 50000)
+  int get _basePrice {
+    final cleanString = widget.price.replaceAll(RegExp(r'[^0-9]'), '');
+    return int.tryParse(cleanString) ?? 0;
+  }
+
+  // Fungsi untuk format angka ke Rupiah yang rapi
+  String _formatRupiah(int number) {
+    final formatCurrency = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    return formatCurrency.format(number);
+  }
+
+  // Pemilih Kalender
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _visitDate ?? DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF0D6EFD)),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _visitDate) {
+      setState(() {
+        _visitDate = picked;
+      });
+    }
+  }
+
+  // Helper untuk format tanggal (Contoh: 24 Okt 2026)
+  String _getFormattedDate() {
+    if (_visitDate == null) return "Pilih Tanggal";
+    final List<String> months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Ags',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
+    ];
+    return "${_visitDate!.day} ${months[_visitDate!.month - 1]} ${_visitDate!.year}";
+  }
+
   @override
   Widget build(BuildContext context) {
+    final int totalPrice = _basePrice * _ticketCount;
+
     return Scaffold(
-      backgroundColor: const Color(0xfff8f9fa),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -35,14 +101,14 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'Plesir–Yu',
+          'Checkout Tiket',
           style: TextStyle(
             color: Colors.black87,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
-        centerTitle: false,
+        centerTitle: true,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
@@ -50,7 +116,7 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Detail Pembayaran',
+              'Detail Pesanan Anda',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
@@ -59,17 +125,24 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Konfirmasi pesanan Anda dan lanjutkan ke pembayaran',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              'Pastikan jumlah tiket dan jadwal kunjungan sudah benar.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
             const SizedBox(height: 24),
 
-            // ================= CARD DETAIL KUNJUNGAN & RINCIAN HARGA =================
+            // ================= CARD 1: DETAIL TIKET & DESTINASI =================
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xffe2e8f0), width: 1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               padding: const EdgeInsets.all(20.0),
               child: Column(
@@ -79,24 +152,22 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        // DINAMIS: Menggunakan gambar dari card yang diklik
+                        borderRadius: BorderRadius.circular(14),
                         child: Image.network(
                           widget.imageUrl,
-                          width: 85,
-                          height: 85,
+                          width: 80,
+                          height: 80,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: 85,
-                              height: 85,
-                              color: Colors.grey[300],
-                              child: const Icon(
-                                Icons.image,
-                                color: Colors.grey,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                width: 80,
+                                height: 80,
+                                color: Colors.grey[200],
+                                child: const Icon(
+                                  Icons.image,
+                                  color: Colors.grey,
+                                ),
                               ),
-                            );
-                          },
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -104,16 +175,6 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Destinasi',
-                              style: TextStyle(
-                                color: Colors.blue,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            // DINAMIS: Menggunakan nama destinasi yang diklik
                             Text(
                               widget.title,
                               style: const TextStyle(
@@ -121,25 +182,27 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xff0f172a),
                               ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 6),
                             Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Icon(
                                   Icons.location_on,
-                                  color: Colors.grey,
+                                  color: Colors.redAccent,
                                   size: 14,
                                 ),
                                 const SizedBox(width: 4),
-                                // DINAMIS: Menggunakan lokasi dari card yang diklik
                                 Expanded(
                                   child: Text(
                                     widget.location,
                                     style: const TextStyle(
                                       color: Colors.grey,
-                                      fontSize: 13,
+                                      fontSize: 12,
                                     ),
-                                    maxLines: 1,
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -152,143 +215,194 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                   ),
                   const SizedBox(height: 20),
                   const Divider(color: Color(0xffedf2f7), thickness: 1),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
 
-                  // Row Tanggal Kunjungan & Jumlah Tiket
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'TANGGAL KUNJUNGAN',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: const [
-                                Icon(
-                                  Icons.calendar_today_outlined,
-                                  color: Colors.blue,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '24 Okt 2024',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Color(0xff334155),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'JUMLAH TIKET',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: const [
-                                Icon(
-                                  Icons.confirmation_number_outlined,
-                                  color: Colors.blue,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '2 Tiket Dewasa',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Color(0xff334155),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Section Price Breakdown
+                  // --- Tanggal Kunjungan (Bisa di-klik) ---
                   const Text(
-                    'RINCIAN HARGA',
+                    'JADWAL KUNJUNGAN',
                     style: TextStyle(
                       fontSize: 11,
                       color: Colors.grey,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  // DINAMIS: Menggunakan harga asli yang dikirim dari card
-                  _buildPriceRow('Harga Tiket (2x)', widget.price),
                   const SizedBox(height: 8),
-
-                  // Custom Dashed Line Pembatas
-                  LayoutBuilder(
-                    builder:
-                        (BuildContext context, BoxConstraints constraints) {
-                          final boxWidth = constraints.constrainWidth();
-                          const dashWidth = 5.0;
-                          const dashSpace = 3.0;
-                          final dashCount = (boxWidth / (dashWidth + dashSpace))
-                              .floor();
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: List.generate(dashCount, (_) {
-                              return const SizedBox(
-                                width: dashWidth,
-                                height: 1,
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: Color(0xffcbd5e1),
-                                  ),
+                  InkWell(
+                    onTap: () => _selectDate(context),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blue.shade100),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_month,
+                                color: Color(0xFF0D6EFD),
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _getFormattedDate(),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: Color(0xFF0D6EFD),
                                 ),
-                              );
-                            }),
-                          );
-                        },
+                              ),
+                            ],
+                          ),
+                          const Icon(
+                            Icons.edit,
+                            size: 16,
+                            color: Color(0xFF0D6EFD),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // --- Jumlah Tiket (+/-) ---
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'JUMLAH TIKET',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatRupiah(_basePrice),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.remove, size: 18),
+                              color: _ticketCount > 1
+                                  ? Colors.black87
+                                  : Colors.grey,
+                              onPressed: () {
+                                if (_ticketCount > 1)
+                                  setState(() => _ticketCount--);
+                              },
+                              constraints: const BoxConstraints(
+                                minWidth: 36,
+                                minHeight: 36,
+                              ),
+                              padding: EdgeInsets.zero,
+                            ),
+                            Text(
+                              '$_ticketCount',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add, size: 18),
+                              color: const Color(0xFF0D6EFD),
+                              onPressed: () => setState(() => _ticketCount++),
+                              constraints: const BoxConstraints(
+                                minWidth: 36,
+                                minHeight: 36,
+                              ),
+                              padding: EdgeInsets.zero,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // ================= CARD 2: RINCIAN HARGA =================
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'RINCIAN HARGA',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Total Payment
+                  _buildPriceRow(
+                    'Harga Tiket ($_ticketCount x)',
+                    _formatRupiah(totalPrice),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildPriceRow(
+                    'Biaya Layanan',
+                    'Rp 0',
+                  ), // Dummy biaya layanan
+                  const SizedBox(height: 16),
+                  const Divider(color: Color(0xffedf2f7), thickness: 1),
+                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Total\nPembayaran',
+                        'Total Pembayaran',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: Color(0xff0f172a),
                         ),
                       ),
-                      // DINAMIS: Total pembayaran disesuaikan dengan harga tiket
                       Text(
-                        widget.price,
+                        _formatRupiah(totalPrice),
                         style: const TextStyle(
-                          fontSize: 22,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue,
+                          color: Color(0xFF0D6EFD),
                         ),
                       ),
                     ],
@@ -304,13 +418,19 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: Color(0xff334155),
+                color: Colors.grey,
               ),
             ),
             const SizedBox(height: 12),
+
+            // Note: Data ini hardcode, bisa diganti pakai List/API nanti
             const Text(
               'E-Wallet',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
             _buildPaymentMethodItem(
@@ -331,9 +451,14 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
               Colors.blue,
             ),
             const SizedBox(height: 16),
+
             const Text(
               'Transfer Bank',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
             _buildPaymentMethodItem(
@@ -341,47 +466,67 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
               Icons.account_balance,
               Colors.teal,
             ),
-            const SizedBox(height: 32),
 
-            // ================= TOMBOL KONFIRMASI PEMBAYARAN =================
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                onPressed: () {
-                  // Navigasi langsung menuju halaman InstruksiCheckoutScreen
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const InstruksiCheckoutScreen(),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xff4a90e2),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  elevation: 2,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Text(
-                      'Konfirmasi Pembayaran',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    Icon(Icons.arrow_forward, size: 18),
-                  ],
-                ),
-              ),
+            const SizedBox(
+              height: 100,
+            ), // Spacing agar tidak tertutup tombol bawah
+          ],
+        ),
+      ),
+
+      // ================= STICKY BOTTOM BUTTON =================
+      bottomSheet: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -4),
             ),
           ],
+        ),
+        child: SafeArea(
+          child: SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: ElevatedButton(
+              onPressed: () {
+                if (_visitDate == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Silakan pilih tanggal kunjungan terlebih dahulu!',
+                      ),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
+                // Navigasi ke halaman Instruksi
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const InstruksiCheckoutScreen(),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D6EFD),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 2,
+              ),
+              child: const Text(
+                'Lanjutkan Pembayaran',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -414,12 +559,12 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
       borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isSelected
+              ? const Color(0xFF0D6EFD).withOpacity(0.05)
+              : Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected
-                ? const Color(0xff4a90e2)
-                : const Color(0xffe2e8f0),
+            color: isSelected ? const Color(0xFF0D6EFD) : Colors.grey.shade300,
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -438,20 +583,19 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
             Expanded(
               child: Text(
                 name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
+                style: TextStyle(
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                   fontSize: 14,
-                  color: Color(0xff334155),
+                  color: isSelected
+                      ? const Color(0xFF0D6EFD)
+                      : const Color(0xff334155),
                 ),
               ),
             ),
-            Radio<String>(
-              value: name,
-              groupValue: _selectedPaymentMethod,
-              activeColor: const Color(0xff4a90e2),
-              onChanged: (String? value) =>
-                  setState(() => _selectedPaymentMethod = value!),
-            ),
+            if (isSelected)
+              const Icon(Icons.check_circle, color: Color(0xFF0D6EFD), size: 22)
+            else
+              const Icon(Icons.circle_outlined, color: Colors.grey, size: 22),
           ],
         ),
       ),

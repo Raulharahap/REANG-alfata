@@ -38,21 +38,21 @@ import 'package:reang_app/models/toko_model.dart';
 import 'package:reang_app/models/notification_model.dart';
 import 'package:reang_app/models/admin_analitik_model.dart';
 import 'package:reang_app/models/dumas_analitik_model.dart';
-import 'package:http/http.dart' as http;
+import 'package:reang_app/models/mitra_plesir_model.dart';
+import 'package:reang_app/models/tiket_wisata_model.dart';
+import 'package:reang_app/models/tiket_event_model.dart';
 import 'dart:convert';
 
 /// Kelas ini bertanggung jawab untuk semua komunikasi dengan API eksternal.
 class ApiService {
   final Dio _dio = Dio();
-  final String baseUrl =
-      "https://obsessed-pang-overbite.ngrok-free.dev"; // contoh
 
   // =======================================================================
   // KONFIGURASI BASE URL
   // =======================================================================
   // Backend lokal
   final String _baseUrlBackend =
-      'https://obsessed-pang-overbite.ngrok-free.dev/api';
+      'https://c4eb-2402-8780-103b-abc-d45e-c0c5-b397-1bce.ngrok-free.app/api';
 
   // =======================================================================
   // API BERITA (EKSTERNAL)
@@ -3234,8 +3234,10 @@ class ApiService {
     }
   }
 
-  //fungsi untuk mengirim data pendaftaran mitra ke backend
-  Future<bool> registerMitraPlesir({
+  // =======================================================================
+  // API REGISTER MITRA PLESIR (BARU)
+  // =======================================================================
+  Future<MitraPlesirModel> registerMitraPlesir({
     required String token,
     required String nama,
     required String alamat,
@@ -3243,66 +3245,530 @@ class ApiService {
     required String kontak,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse(
-          '$baseUrl/plesir/register-mitra',
-        ), // Sesuaikan dengan endpoint Laravel Anda
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-        body: {
-          'nama_wisata': nama,
+      final response = await _dio.post(
+        '$_baseUrlBackend/plesir/register-mitra',
+        data: {
+          'nama': nama, // Sesuai dengan $request->nama di Laravel
           'alamat': alamat,
           'deskripsi': deskripsi,
           'kontak': kontak,
         },
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return true;
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        // Mengembalikan data model MitraPlesir yang baru dibuat
+        return MitraPlesirModel.fromJson(response.data['data']);
       } else {
-        throw Exception('Gagal mendaftar mitra');
+        throw Exception(response.data['message'] ?? 'Gagal mendaftar mitra');
+      }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Terjadi kesalahan dari server',
+        );
+      } else {
+        throw Exception('Gagal terhubung ke server. Periksa koneksi Anda.');
       }
     } catch (e) {
-      rethrow;
+      throw Exception('Terjadi kesalahan: $e');
     }
   }
 
-  Future<bool> registerMitraWisata({
+  // =======================================================================
+  // API GET PROFIL MITRA PLESIR
+  // =======================================================================
+  Future<MitraPlesirModel> fetchProfilMitraPlesir(String token) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrlBackend/plesir/profil-mitra',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return MitraPlesirModel.fromJson(response.data['data']);
+      } else {
+        throw Exception('Gagal memuat profil wisata');
+      }
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? 'Terjadi kesalahan jaringan',
+      );
+    }
+  }
+
+  // =======================================================================
+  // API UPDATE PROFIL MITRA PLESIR (DENGAN FOTO)
+  // =======================================================================
+  Future<MitraPlesirModel> updateProfilMitraPlesir({
     required String token,
     required String nama,
     required String alamat,
     required String kontak,
     required String deskripsi,
+    XFile? foto,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse(
-          '$baseUrl/api/mitra-wisata',
-        ), // Sesuaikan endpoint route Laravel-mu
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'nama': nama,
-          'alamat': alamat,
-          'kontak':
-              kontak, // Di laravel akan ditangkap sebagai $request->kontak
-          'deskripsi': deskripsi,
-        }),
+      // Menggunakan FormData karena kita mengirim file (foto)
+      FormData formData = FormData.fromMap({
+        'nama': nama,
+        'alamat': alamat,
+        'kontak': kontak,
+        'deskripsi': deskripsi,
+      });
+
+      // Tambahkan foto jika user memilih foto baru
+      if (foto != null) {
+        formData.files.add(
+          MapEntry(
+            'foto',
+            await MultipartFile.fromFile(foto.path, filename: foto.name),
+          ),
+        );
+      }
+
+      // Memakai method POST karena Laravel lebih stabil menangani FormData via POST
+      final response = await _dio.post(
+        '$_baseUrlBackend/plesir/update-mitra',
+        data: formData,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+            'Content-Type': 'multipart/form-data',
+          },
+        ),
       );
 
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        return true;
+      if (response.statusCode == 200) {
+        return MitraPlesirModel.fromJson(response.data['data']);
       } else {
-        final errorData = jsonDecode(response.body);
-        throw Exception(errorData['message'] ?? 'Gagal mendaftar mitra');
+        throw Exception('Gagal memperbarui profil wisata');
       }
-    } catch (e) {
-      throw Exception('Koneksi Error: ${e.toString()}');
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? 'Terjadi kesalahan server',
+      );
+    }
+  }
+
+  // =======================================================================
+  // 1. CREATE TIKET WISATA
+  // =======================================================================
+  Future<TiketWisataModel> createTiketWisata({
+    required String token,
+    required TiketWisataModel data,
+    required XFile fotoUtamaFile,
+    required List<XFile> galeriFiles,
+  }) async {
+    try {
+      // 1. PERSIAPAN DATA MULTIPART
+      Map<String, dynamic> payload = {
+        'nama_wisata': data.namaWisata,
+        'kategori_wisata': data.kategoriWisata,
+        'deskripsi': data.deskripsi,
+        'alamat': data.alamat,
+        'jam_operasional': data.jamOperasional,
+        'harga_tiket': data.hargaTiket
+            .toString(), // Pastikan jadi string untuk FormData
+        'kuota_per_hari': data.kuotaPerHari.toString(),
+      };
+
+      // [PENTING] Cara benar mengirim Array/List ke Laravel via FormData
+      for (int i = 0; i < data.fasilitas.length; i++) {
+        payload['fasilitas[$i]'] = data.fasilitas[i];
+      }
+
+      // 2. Tambahkan Foto Utama
+      payload['foto_utama'] = await MultipartFile.fromFile(
+        fotoUtamaFile.path,
+        filename: fotoUtamaFile.name,
+      );
+
+      // 3. Tambahkan Banyak Foto Galeri (Array File)
+      if (galeriFiles.isNotEmpty) {
+        List<MultipartFile> galeriMultipart = [];
+        for (var file in galeriFiles) {
+          galeriMultipart.add(
+            await MultipartFile.fromFile(file.path, filename: file.name),
+          );
+        }
+        // Sama seperti fasilitas, array file di Laravel harus pakai []
+        payload['galeri_foto[]'] = galeriMultipart;
+      }
+
+      // Ubah Map jadi FormData
+      FormData formData = FormData.fromMap(payload);
+
+      final response = await _dio.post(
+        '$_baseUrlBackend/plesir/wisata',
+        data: formData,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json', // Paksa Laravel balas pakai JSON
+          },
+        ),
+      );
+
+      return TiketWisataModel.fromJson(response.data['data']);
+    } on DioException catch (e) {
+      // [PERBAIKAN] Penanganan error yang aman dari HTML String
+      if (e.response != null && e.response?.data is Map) {
+        // Jika error dari validasi Laravel (422) atau JSON
+        final responseData = e.response?.data;
+        String errorMessage =
+            responseData['message'] ?? "Gagal menyimpan tiket.";
+
+        // Cek jika ada detail error validasi
+        if (responseData['errors'] != null) {
+          errorMessage = responseData['errors'].values.first[0];
+        }
+        throw Exception(errorMessage);
+      } else {
+        // Jika server Laravel crash (500 Error HTML)
+        throw Exception(
+          "Server Error (500): Silakan cek log terminal Laravel Anda.",
+        );
+      }
+    }
+  }
+
+  // =======================================================================
+  // 2. UPDATE TIKET WISATA (POST Update Trik)
+  // =======================================================================
+  Future<TiketWisataModel> updateTiketWisata({
+    required String token,
+    required int tiketId,
+    required TiketWisataModel data,
+    XFile? fotoUtamaBaru, // Nullable, diisi jika user ganti foto
+    List<XFile>? galeriBaru, // Nullable, diisi jika user nambah foto galeri
+    List<int>?
+    idsFotoGaleriDihapus, // Array ID foto lama yang mau dihapus di DB
+  }) async {
+    try {
+      Map<String, dynamic> payload = {
+        'nama_wisata': data.namaWisata,
+        'kategori_wisata': data.kategoriWisata,
+        'deskripsi': data.deskripsi,
+        'alamat': data.alamat,
+        'jam_operasional': data.jamOperasional,
+        'harga_tiket': data.hargaTiket,
+        'kuota_per_hari': data.kuotaPerHari,
+        'fasilitas': data.fasilitas,
+      };
+
+      // Jika user upload foto UTAMA baru
+      if (fotoUtamaBaru != null) {
+        payload['foto_utama'] = await MultipartFile.fromFile(
+          fotoUtamaBaru.path,
+          filename: fotoUtamaBaru.name,
+        );
+      }
+
+      // Jika user nambah foto GALERI baru
+      if (galeriBaru != null && galeriBaru.isNotEmpty) {
+        List<MultipartFile> galeriMultipart = [];
+        for (var file in galeriBaru) {
+          galeriMultipart.add(
+            await MultipartFile.fromFile(file.path, filename: file.name),
+          );
+        }
+        payload['galeri_foto'] = galeriMultipart;
+      }
+
+      // Jika user menghapus foto galeri lama (Kirim array ID)
+      if (idsFotoGaleriDihapus != null && idsFotoGaleriDihapus.isNotEmpty) {
+        payload['hapus_galeri'] = idsFotoGaleriDihapus;
+      }
+
+      FormData formData = FormData.fromMap(payload);
+
+      // Pakai POST sesuai route Laravel: /wisata/update/{id}
+      final response = await _dio.post(
+        '$_baseUrlBackend/plesir/wisata/update/$tiketId',
+        data: formData,
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+
+      return TiketWisataModel.fromJson(response.data['data']);
+    } on DioException catch (e) {
+      throw Exception(e.response?.data['message'] ?? "Gagal update tiket");
+    }
+  }
+
+  // =======================================================================
+  // 3. DELETE TIKET WISATA
+  // =======================================================================
+  Future<bool> deleteTiketWisata({
+    required String token,
+    required int tiketId,
+  }) async {
+    try {
+      // Pakai DELETE sesuai route Laravel: /wisata/delete/{id}
+      await _dio.delete(
+        '$_baseUrlBackend/plesir/wisata/delete/$tiketId',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      return true;
+    } on DioException catch (e) {
+      throw Exception(e.response?.data['message'] ?? "Gagal menghapus tiket");
+    }
+  }
+
+  // =======================================================================
+  // CREATE TIKET EVENT
+  // =======================================================================
+  Future<TiketEventModel> createTiketEvent({
+    required String token,
+    required TiketEventModel data,
+    required XFile fotoUtamaFile,
+    required List<XFile> galeriFiles,
+  }) async {
+    try {
+      // 1. Data Biasa
+      Map<String, dynamic> payload = {
+        'nama_event': data.namaEvent,
+        'kategori_event': data.kategoriEvent,
+        'deskripsi': data.deskripsi,
+        'lokasi': data.lokasi,
+        'tanggal_event': data.tanggalEvent,
+        'jam_event': data.jamEvent,
+        // [PENTING] Ubah Array of Object menjadi JSON String
+        'detail_tiket': jsonEncode(
+          data.varians.map((e) => e.toJson()).toList(),
+        ),
+      };
+
+      // 2. Foto Utama
+      payload['foto_utama'] = await MultipartFile.fromFile(
+        fotoUtamaFile.path,
+        filename: fotoUtamaFile.name,
+      );
+
+      // 3. Foto Galeri (Array)
+      if (galeriFiles.isNotEmpty) {
+        List<MultipartFile> galeriMultipart = [];
+        for (var file in galeriFiles) {
+          galeriMultipart.add(
+            await MultipartFile.fromFile(file.path, filename: file.name),
+          );
+        }
+        payload['galeri_foto[]'] = galeriMultipart;
+      }
+
+      FormData formData = FormData.fromMap(payload);
+
+      final response = await _dio.post(
+        '$_baseUrlBackend/plesir/event',
+        data: formData,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      return TiketEventModel.fromJson(response.data['data']);
+    } on DioException catch (e) {
+      if (e.response != null && e.response?.data is Map) {
+        final responseData = e.response?.data;
+        String errorMessage =
+            responseData['message'] ?? "Gagal menyimpan event.";
+        if (responseData['errors'] != null) {
+          errorMessage = responseData['errors'].values.first[0];
+        }
+        throw Exception(errorMessage);
+      } else {
+        throw Exception(
+          "Server Error (500): Silakan cek log terminal Laravel Anda.",
+        );
+      }
+    }
+  }
+
+  // =======================================================================
+  // 2. UPDATE TIKET EVENT (POST Update Trik)
+  // =======================================================================
+  Future<TiketEventModel> updateTiketEvent({
+    required String token,
+    required int eventId,
+    required TiketEventModel data,
+    XFile? fotoUtamaBaru, // Nullable, hanya diisi kalau user ganti foto
+    List<XFile>? galeriBaru, // Nullable, untuk tambahan galeri
+    List<int>?
+    idsFotoGaleriDihapus, // Array ID foto lama yang mau dihapus di DB
+  }) async {
+    try {
+      // 1. Data Teks & JSON Varian
+      Map<String, dynamic> payload = {
+        'nama_event': data.namaEvent,
+        'kategori_event': data.kategoriEvent,
+        'deskripsi': data.deskripsi,
+        'lokasi': data.lokasi,
+        'tanggal_event': data.tanggalEvent,
+        'jam_event': data.jamEvent,
+        // Array Varian harus di-encode jadi String JSON
+        'detail_tiket': jsonEncode(
+          data.varians.map((e) => e.toJson()).toList(),
+        ),
+      };
+
+      // 2. Jika user upload foto UTAMA baru
+      if (fotoUtamaBaru != null) {
+        payload['foto_utama'] = await MultipartFile.fromFile(
+          fotoUtamaBaru.path,
+          filename: fotoUtamaBaru.name,
+        );
+      }
+
+      // 3. Jika user nambah foto GALERI baru
+      if (galeriBaru != null && galeriBaru.isNotEmpty) {
+        List<MultipartFile> galeriMultipart = [];
+        for (var file in galeriBaru) {
+          galeriMultipart.add(
+            await MultipartFile.fromFile(file.path, filename: file.name),
+          );
+        }
+        payload['galeri_foto[]'] = galeriMultipart;
+      }
+
+      // 4. Jika user menghapus foto galeri lama
+      // Format array untuk Laravel FormData
+      if (idsFotoGaleriDihapus != null && idsFotoGaleriDihapus.isNotEmpty) {
+        for (int i = 0; i < idsFotoGaleriDihapus.length; i++) {
+          payload['hapus_galeri[$i]'] = idsFotoGaleriDihapus[i];
+        }
+      }
+
+      FormData formData = FormData.fromMap(payload);
+
+      // Gunakan POST sesuai standar Laravel untuk upload Multipart File saat Update
+      final response = await _dio.post(
+        '$_baseUrlBackend/plesir/event/update/$eventId',
+        data: formData,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      return TiketEventModel.fromJson(response.data['data']);
+    } on DioException catch (e) {
+      if (e.response != null && e.response?.data is Map) {
+        final responseData = e.response?.data;
+        String errorMessage =
+            responseData['message'] ?? "Gagal mengupdate event.";
+        if (responseData['errors'] != null) {
+          errorMessage = responseData['errors'].values.first[0];
+        }
+        throw Exception(errorMessage);
+      } else {
+        throw Exception(
+          "Server Error (500): Silakan cek log terminal Laravel Anda.",
+        );
+      }
+    }
+  }
+
+  // =======================================================================
+  // 3. DELETE TIKET EVENT
+  // =======================================================================
+  Future<bool> deleteTiketEvent({
+    required String token,
+    required int eventId,
+  }) async {
+    try {
+      await _dio.delete(
+        '$_baseUrlBackend/plesir/event/delete/$eventId',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+      return true; // Return true kalau sukses
+    } on DioException catch (e) {
+      if (e.response != null && e.response?.data is Map) {
+        throw Exception(
+          e.response?.data['message'] ?? "Gagal menghapus event.",
+        );
+      } else {
+        throw Exception("Terjadi kesalahan jaringan atau Server Error.");
+      }
+    }
+  }
+
+  // =======================================================================
+  // GET TIKET MITRA (WISATA & EVENT)
+  // =======================================================================
+  Future<Map<String, dynamic>> getTiketMitra(String token) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrlBackend/plesir/mitra/tiket-ku',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      // Memisahkan data Wisata dan Event
+      List<TiketWisataModel> wisata = (response.data['data']['wisata'] as List)
+          .map((x) => TiketWisataModel.fromJson(x))
+          .toList();
+
+      List<TiketEventModel> event = (response.data['data']['event'] as List)
+          .map((x) => TiketEventModel.fromJson(x))
+          .toList();
+
+      return {'wisata': wisata, 'event': event};
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? "Gagal mengambil data tiket.",
+      );
+    }
+  }
+
+  // =======================================================================
+  // GET EXPLORE PLESIR (USER BACA SEMUA TIKET)
+  // =======================================================================
+  Future<Map<String, dynamic>> explorePlesir({String query = ''}) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrlBackend/plesir/explore',
+        queryParameters: {'search': query}, // Mengirim parameter pencarian
+        options: Options(headers: {'Accept': 'application/json'}),
+      );
+
+      List<TiketWisataModel> wisata = (response.data['data']['wisata'] as List)
+          .map((x) => TiketWisataModel.fromJson(x))
+          .toList();
+
+      List<TiketEventModel> event = (response.data['data']['event'] as List)
+          .map((x) => TiketEventModel.fromJson(x))
+          .toList();
+
+      return {'wisata': wisata, 'event': event};
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? "Gagal memuat data explore.",
+      );
     }
   }
 }

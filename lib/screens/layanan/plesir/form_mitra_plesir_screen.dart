@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:reang_app/providers/auth_provider.dart';
+import 'package:flutter_styled_toast/flutter_styled_toast.dart';
 import 'package:reang_app/services/api_service.dart';
+import 'package:reang_app/providers/auth_provider.dart';
 import 'package:reang_app/screens/layanan/plesir/admin/home_admin_plesir_screen.dart';
 
 class FormMitraPlesirScreen extends StatefulWidget {
@@ -13,81 +14,33 @@ class FormMitraPlesirScreen extends StatefulWidget {
 
 class _FormMitraPlesirScreenState extends State<FormMitraPlesirScreen> {
   final _formKey = GlobalKey<FormState>();
-  final ApiService _apiService = ApiService();
-
-  final TextEditingController _namaWisataController = TextEditingController();
-  final TextEditingController _alamatController = TextEditingController();
-  final TextEditingController _deskripsiController = TextEditingController();
-  final TextEditingController _kontakController = TextEditingController();
+  final _namaWisataController = TextEditingController();
+  final _alamatController = TextEditingController();
+  final _deskripsiController = TextEditingController();
+  final _kontakController = TextEditingController();
 
   bool _isLoading = false;
+  final ApiService _apiService = ApiService();
 
-  Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate()) return;
+  @override
+  void initState() {
+    super.initState();
+    // Pengecekan role saat halaman pertama kali dibuka
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkIfAlreadyMitra();
+    });
+  }
 
-    setState(() => _isLoading = true);
+  void _checkIfAlreadyMitra() {
+    final authProvider = context.read<AuthProvider>();
 
-    // Efek kosmetik UX loading profesional
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.token;
-
-    if (token == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sesi habis, silakan login kembali')),
-        );
-      }
-      setState(() => _isLoading = false);
-      return;
-    }
-
-    try {
-      // Memanggil ApiService yang sudah mengarah ke endpoint mitra_wisata
-      final response = await _apiService.registerMitraWisata(
-        token: token,
-        nama: _namaWisataController.text,
-        alamat: _alamatController.text,
-        kontak: _kontakController
-            .text, // Sesuai dengan request backend ($request->kontak)
-        deskripsi: _deskripsiController.text,
+    // Asumsi: Kamu memiliki getter isAdminPlesir di AuthProvider
+    // (Sama seperti authProvider.isUmkm)
+    if (authProvider.isAdminPlesir) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeAdminPlesirScreen()),
       );
-
-      // JIKA API BERHASIL, PINDAH KE DASHBOARD DI SINI
-      if (mounted) {
-        // [PERUBAHAN LOGIKA DI SINI]:
-        // Update status pendaftaran mitra di AuthProvider / Local Storage Anda agar aplikasi ingat
-        // Contoh jika di AuthProvider Anda ada fungsi setMitraStatus:
-        // authProvider.setMitraStatus(true);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Pendaftaran Berhasil! Role Anda diperbarui menjadi Admin Mitra.',
-            ),
-          ),
-        );
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const HomeAdminPlesirScreen(),
-          ),
-        );
-      }
-    } catch (e) {
-      // JIKA API GAGAL, AKAN TERTANGKAP DI SINI DAN HALAMAN TIDAK AKAN PINDAH
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -98,6 +51,82 @@ class _FormMitraPlesirScreenState extends State<FormMitraPlesirScreen> {
     _deskripsiController.dispose();
     _kontakController.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitForm() async {
+    // 1. Validasi form
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final authProvider = context.read<AuthProvider>();
+    final navigator = Navigator.of(context);
+
+    try {
+      final token = authProvider.token;
+      if (token == null) {
+        throw Exception("Sesi Anda telah berakhir. Silakan login kembali.");
+      }
+
+      // =========================================================================
+      // 2. DAFTARKAN MITRA PLESIR BARU
+      // =========================================================================
+      await _apiService.registerMitraPlesir(
+        token: token,
+        nama: _namaWisataController.text,
+        alamat: _alamatController.text,
+        deskripsi: _deskripsiController.text,
+        kontak: _kontakController.text,
+      );
+
+      // =========================================================================
+      // 3. SINKRONISASI ULANG DATA USER
+      // =========================================================================
+
+      // 3a. Update role lokal (jika belum jadi Admin Plesir)
+      // Asumsi: Kamu perlu membuat fungsi upgradeToAdminPlesir() di AuthProvider
+      if (!authProvider.isAdminPlesir) {
+        await authProvider.upgradeToAdminPlesir();
+      }
+
+      // 3b. Ambil ulang profil user dari backend (agar status role terbaru masuk)
+      await authProvider.fetchUserProfile();
+
+      // =========================================================================
+      // 4. TAMPILKAN NOTIFIKASI BERHASIL
+      // =========================================================================
+      if (!mounted) return;
+
+      showToast(
+        "Pendaftaran Berhasil! Role Anda diperbarui.",
+        context: context,
+        backgroundColor: Colors.green,
+        position: StyledToastPosition.bottom,
+      );
+
+      // =========================================================================
+      // 5. ARAHKAN USER KE DASHBOARD ADMIN PLESIR
+      // =========================================================================
+      navigator.pushReplacement(
+        MaterialPageRoute(builder: (context) => const HomeAdminPlesirScreen()),
+      );
+    } catch (e) {
+      // =========================================================================
+      // 6. ERROR HANDLING
+      // =========================================================================
+      if (!mounted) return;
+
+      showToast(
+        e.toString().replaceAll('Exception: ', ''),
+        context: context,
+        backgroundColor: Colors.red,
+        position: StyledToastPosition.bottom,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -120,7 +149,7 @@ class _FormMitraPlesirScreenState extends State<FormMitraPlesirScreen> {
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
                       "Lengkapi Data Wisata Anda",
@@ -129,7 +158,7 @@ class _FormMitraPlesirScreenState extends State<FormMitraPlesirScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
 
                     _buildTextField(
                       controller: _namaWisataController,
@@ -137,24 +166,7 @@ class _FormMitraPlesirScreenState extends State<FormMitraPlesirScreen> {
                       hint: "Contoh: Pantai Karang Song",
                       icon: Icons.landscape,
                     ),
-                    const SizedBox(height: 15),
-
-                    _buildTextField(
-                      controller: _alamatController,
-                      label: "Alamat Lengkap",
-                      hint: "Jl. Raya Indramayu...",
-                      icon: Icons.location_on,
-                    ),
-                    const SizedBox(height: 15),
-
-                    _buildTextField(
-                      controller: _kontakController,
-                      label: "Nomor WhatsApp/Kontak",
-                      hint: "08123456xxxx",
-                      icon: Icons.phone,
-                      keyboardType: TextInputType.phone,
-                    ),
-                    const SizedBox(height: 15),
+                    const SizedBox(height: 16),
 
                     _buildTextField(
                       controller: _deskripsiController,
@@ -163,28 +175,44 @@ class _FormMitraPlesirScreenState extends State<FormMitraPlesirScreen> {
                       icon: Icons.description,
                       maxLines: 3,
                     ),
+                    const SizedBox(height: 16),
 
-                    const SizedBox(height: 30),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        onPressed: _submitForm,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
+                    _buildTextField(
+                      controller: _alamatController,
+                      label: "Alamat Lengkap",
+                      hint: "Jl. Raya Indramayu...",
+                      icon: Icons.location_on,
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+
+                    _buildTextField(
+                      controller: _kontakController,
+                      label: "Nomor WhatsApp/Kontak",
+                      hint: "08123456xxxx",
+                      icon: Icons.phone,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 32),
+
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.save, color: Colors.white),
+                      label: const Text(
+                        'Daftar Sekarang',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
                         ),
-                        child: const Text(
-                          "Daftar Sekarang",
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
+                      onPressed: _submitForm,
                     ),
                   ],
                 ),
@@ -215,8 +243,12 @@ class _FormMitraPlesirScreenState extends State<FormMitraPlesirScreen> {
           borderSide: const BorderSide(color: Colors.blue, width: 2),
         ),
       ),
-      validator: (value) =>
-          value == null || value.isEmpty ? "$label wajib diisi" : null,
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return '$label tidak boleh kosong';
+        }
+        return null;
+      },
     );
   }
 }

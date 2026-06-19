@@ -1,26 +1,117 @@
 import 'package:flutter/material.dart';
-// Mengimport file asli yang berada di dalam folder yang sama
+import 'package:provider/provider.dart';
+import 'package:reang_app/providers/auth_provider.dart';
+import 'package:reang_app/services/api_service.dart';
+import 'package:reang_app/models/tiket_wisata_model.dart';
+import 'package:reang_app/models/tiket_event_model.dart';
+import 'package:flutter_styled_toast/flutter_styled_toast.dart';
+
+// Import Form
 import 'form_input_event.dart';
 import 'form_input_wisata.dart';
+// Import Detail (Akan kita buat setelah ini)
+import 'detail_wisata_mitra_screen.dart';
+import 'detail_event_mitra_screen.dart';
 
-class ManageEventScreen extends StatelessWidget {
+class ManageEventScreen extends StatefulWidget {
   const ManageEventScreen({super.key});
 
   @override
+  State<ManageEventScreen> createState() => _ManageEventScreenState();
+}
+
+class _ManageEventScreenState extends State<ManageEventScreen> {
+  final ApiService _apiService = ApiService();
+  bool _isLoading = true;
+
+  List<TiketWisataModel> _listWisata = [];
+  List<TiketEventModel> _listEvent = [];
+
+  // 0 = Semua, 1 = Wisata, 2 = Event
+  int _selectedFilterIndex = 0;
+  final List<String> _filters = ['Semua', 'Wisata', 'Event'];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    final auth = context.read<AuthProvider>();
+
+    try {
+      if (auth.token != null) {
+        final data = await _apiService.getTiketMitra(auth.token!);
+        setState(() {
+          _listWisata = data['wisata'] ?? [];
+          _listEvent = data['event'] ?? [];
+        });
+      }
+    } catch (e) {
+      showToast(
+        "Gagal memuat data: $e",
+        context: context,
+        backgroundColor: Colors.red,
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Menggabungkan dan memfilter list
+  List<dynamic> get _filteredItems {
+    List<dynamic> combined = [];
+    if (_selectedFilterIndex == 0 || _selectedFilterIndex == 1) {
+      combined.addAll(_listWisata);
+    }
+    if (_selectedFilterIndex == 0 || _selectedFilterIndex == 2) {
+      combined.addAll(_listEvent);
+    }
+
+    // Sortir berdasarkan ID terbaru (asumsi ID lebih besar = lebih baru)
+    combined.sort((a, b) => (b.id ?? 0).compareTo(a.id ?? 0));
+    return combined;
+  }
+
+  String _getImageUrl(String? path) {
+    if (path == null || path.isEmpty) return '';
+    const String domainHost =
+        'https://c4eb-2402-8780-103b-abc-d45e-c0c5-b397-1bce.ngrok-free.app';
+    return '$domainHost/storage/$path';
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final items = _filteredItems;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      // AppBar dihapus total agar tidak menumpuk dengan AppBar biru Dashboard utama Anda
+      floatingActionButton: items.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: () => _showSelectionBottomSheet(context),
+              backgroundColor: const Color(0xFF005691),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text(
+                "Tambah Tiket",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            )
+          : null,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- KONTEN ATAS: Judul & Subjudul (Sama persis dengan Pesanan Masuk) ---
+          // --- HEADER ---
           Padding(
             padding: const EdgeInsets.only(
               left: 20.0,
               right: 20.0,
               top: 24.0,
-              bottom: 8.0,
+              bottom: 16.0,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -30,7 +121,7 @@ class ManageEventScreen extends StatelessWidget {
                   style: TextStyle(
                     color: Colors.black87,
                     fontWeight: FontWeight.bold,
-                    fontSize: 22, // Ukuran font diperbesar agar konsisten
+                    fontSize: 22,
                   ),
                 ),
                 SizedBox(height: 6),
@@ -41,16 +132,331 @@ class ManageEventScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
 
-          // --- KONTEN BAWAH: Halaman Empty State Lingkaran Abu-Abu ---
-          Expanded(child: _buildEmptyStateContent(context)),
+          // --- FILTER CHIPS ---
+          SizedBox(
+            height: 40,
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
+              itemCount: _filters.length,
+              itemBuilder: (context, index) {
+                final isSelected = _selectedFilterIndex == index;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: ChoiceChip(
+                    label: Text(
+                      _filters[index],
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.black87,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      if (selected)
+                        setState(() => _selectedFilterIndex = index);
+                    },
+                    selectedColor: const Color(0xFF005691),
+                    backgroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(
+                        color: isSelected
+                            ? const Color(0xFF005691)
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                    showCheckmark: false,
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // --- KONTEN LIST / EMPTY STATE ---
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : items.isEmpty
+                ? _buildEmptyStateContent(context)
+                : RefreshIndicator(
+                    onRefresh: _fetchData,
+                    color: const Color(0xFF005691),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        return _buildItemCard(item);
+                      },
+                    ),
+                  ),
+          ),
         ],
       ),
     );
   }
 
-  // Widget pembentuk struktur empty state (Menggunakan style lingkaran abu-abu yang konsisten)
+  // Desain Card List yang Elegan
+  // Desain Card List yang Elegan (Vertical Full Width)
+  Widget _buildItemCard(dynamic item) {
+    final bool isWisata = item is TiketWisataModel;
+
+    final String title = isWisata ? item.namaWisata : item.namaEvent;
+    final String location = isWisata ? item.alamat : item.lokasi;
+    final String category = isWisata ? item.kategoriWisata : item.kategoriEvent;
+    final String imageUrl = _getImageUrl(item.fotoUtamaUrl);
+    final String status = item.isActive ? "Aktif" : "Non-Aktif";
+
+    // Ambil info spesifik (Harga untuk Wisata, Tanggal untuk Event)
+    final String extraInfo = isWisata
+        ? "Rp ${item.hargaTiket}"
+        : "${item.tanggalEvent} • ${item.jamEvent}";
+
+    final IconData extraIcon = isWisata
+        ? Icons.confirmation_number_outlined
+        : Icons.calendar_month_outlined;
+
+    return GestureDetector(
+      onTap: () async {
+        // Navigasi ke halaman detail dan tunggu jika ada update (refresh)
+        final bool? needRefresh = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => isWisata
+                ? DetailWisataMitraScreen(wisata: item)
+                : DetailEventMitraScreen(event: item),
+          ),
+        );
+        if (needRefresh == true) _fetchData();
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // --- HEADER FOTO FULL WIDTH ---
+            Stack(
+              children: [
+                Container(
+                  height: 160,
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) => Container(
+                      color: Colors.grey.shade200,
+                      child: const Icon(
+                        Icons.broken_image,
+                        color: Colors.grey,
+                        size: 40,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Badge Kategori Kiri Atas
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isWisata
+                          ? Colors.teal.shade700
+                          : Colors.orange.shade800,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      isWisata ? "WISATA" : "EVENT",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Badge Status Kanan Atas
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircleAvatar(
+                          radius: 4,
+                          backgroundColor: item.isActive
+                              ? Colors.green
+                              : Colors.red,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          status,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // --- KONTEN BAWAH (INFO TIKET) ---
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: Colors.black87,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Detail Baris 1: Kategori & Harga/Tanggal
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.category_outlined,
+                        size: 16,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        category,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Text(
+                          "•",
+                          style: TextStyle(color: Colors.grey.shade400),
+                        ),
+                      ),
+
+                      Icon(extraIcon, size: 16, color: const Color(0xFF0D6EFD)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          extraInfo,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF0D6EFD),
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Detail Baris 2: Lokasi
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 16,
+                        color: Colors.redAccent,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          location,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                            height: 1.4,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- KODE EMPTY STATE DAN BOTTOM SHEET TETAP SAMA ---
   Widget _buildEmptyStateContent(BuildContext context) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -59,21 +465,18 @@ class ManageEventScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const SizedBox(height: 60),
+            const SizedBox(height: 40),
             Center(
               child: Container(
                 width: 130,
                 height: 130,
                 decoration: const BoxDecoration(
-                  color: Color(
-                    0xFFF1F5F9,
-                  ), // Lingkaran background abu-abu tipis
+                  color: Color(0xFFF1F5F9),
                   shape: BoxShape.circle,
                 ),
                 child: const Center(
                   child: Icon(
-                    Icons
-                        .inventory_2_outlined, // Icon box minimalis agar serasi
+                    Icons.inventory_2_outlined,
                     size: 48,
                     color: Color(0xFF94A3B8),
                   ),
@@ -100,8 +503,6 @@ class ManageEventScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 32),
-
-            // Tombol Tambah Tiket Utama
             SizedBox(
               width: 200,
               height: 48,
@@ -126,10 +527,8 @@ class ManageEventScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 40),
-
-            // Kotak Komponen Tips Edukasi Event di bagian bawah
+            // Tips Event
             Container(
-              width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -230,7 +629,6 @@ class ManageEventScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 13, color: Colors.grey),
               ),
               const SizedBox(height: 24),
-
               ListTile(
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -256,18 +654,18 @@ class ManageEventScreen extends StatelessWidget {
                   'Pantai, kolam renang, situs sejarah, museum, dll.',
                   style: TextStyle(fontSize: 12),
                 ),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  Navigator.push(
+                  final refresh = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const FormInputWisata(),
                     ),
                   );
+                  if (refresh == true) _fetchData();
                 },
               ),
               const SizedBox(height: 12),
-
               ListTile(
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -293,14 +691,15 @@ class ManageEventScreen extends StatelessWidget {
                   'Konser, festival budaya, seminar, pameran, dll.',
                   style: TextStyle(fontSize: 12),
                 ),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  Navigator.push(
+                  final refresh = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const FormInputEvent(),
                     ),
                   );
+                  if (refresh == true) _fetchData();
                 },
               ),
               const SizedBox(height: 16),

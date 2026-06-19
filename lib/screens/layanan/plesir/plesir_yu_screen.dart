@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // <-- Ditambahkan untuk membaca status lokal HP
 import 'package:provider/provider.dart'; // <-- Ditambahkan untuk berinteraksi dengan AuthProvider
 import 'package:reang_app/providers/auth_provider.dart'; // <-- Ditambahkan untuk cek token login
 import 'package:reang_app/models/plesir_model.dart';
@@ -10,6 +9,7 @@ import 'package:reang_app/screens/layanan/plesir/info_wisata_screen.dart';
 import 'package:reang_app/screens/layanan/plesir/form_mitra_plesir_screen.dart';
 import 'package:reang_app/screens/layanan/plesir/admin/home_admin_plesir_screen.dart'; // <-- Ditambahkan untuk bypass langsung ke Home Admin
 import 'package:reang_app/screens/layanan/plesir/tiket_saya_screen.dart';
+import 'package:reang_app/screens/auth/login_screen.dart';
 
 class _CachedPlesirData {
   List<PlesirModel> items = [];
@@ -65,44 +65,34 @@ class _PlesirYuScreenState extends State<PlesirYuScreen> {
   }
 
   // --- LOGIKA GERBANG PENGECEKAN STATUS MITRA ---
-  void _aksesMenuMitra() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.token;
+  // --- LOGIKA GERBANG PENGECEKAN STATUS MITRA (DIPERBARUI) ---
+  void _aksesMenuMitra() {
+    // Membaca status auth saat ini
+    final authProvider = context.read<AuthProvider>();
 
     // 1. Cek apakah sudah login aplikasi utama
-    if (token == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Fitur layanan memerlukan login terlebih dahulu.'),
-          ),
-        );
-      }
-      return;
+    if (!authProvider.isLoggedIn) {
+      // Jika belum login, arahkan ke halaman Login
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+      return; // Hentikan eksekusi di sini
     }
 
-    // 2. Cek status kemitraan lokal di HP
-    final prefs = await SharedPreferences.getInstance();
-    bool sudahDaftarMitra = prefs.getBool('is_mitra_plesir') ?? false;
-
-    if (mounted) {
-      if (sudahDaftarMitra) {
-        // JIKA SUDAH DAFTAR: Langsung bypass ke Home Admin
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const HomeAdminPlesirScreen(),
-          ),
-        );
-      } else {
-        // JIKA BELUM DAFTAR: Arahkan ke Form Pendaftaran
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const FormMitraPlesirScreen(),
-          ),
-        );
-      }
+    // 2. CEK STATUS KEMITRAAN LANGSUNG DARI PROVIDER
+    if (authProvider.isAdminPlesir) {
+      // JIKA SUDAH PUNYA ROLE MITRA PLESIR: Langsung ke Dashboard Admin
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeAdminPlesirScreen()),
+      );
+    } else {
+      // JIKA BELUM PUNYA ROLE: Arahkan ke Form Pendaftaran
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const FormMitraPlesirScreen()),
+      );
     }
   }
 
