@@ -198,21 +198,27 @@ class _FormInputEventState extends State<FormInputEvent> {
     }
   }
 
+  // ✅ DIUPDATE: Paksa format 24 jam (tidak ada AM/PM) menggunakan MediaQuery override
   Future<void> _pilihJam() async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
       initialTime: const TimeOfDay(hour: 19, minute: 0),
       builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFF0D6EFD)),
+        return MediaQuery(
+          // Paksa format 24 jam agar tidak tampil AM/PM
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: const ColorScheme.light(primary: Color(0xFF0D6EFD)),
+            ),
+            child: child!,
           ),
-          child: child!,
         );
       },
     );
     if (picked != null && mounted) {
       setState(() {
+        // Format output: HH:mm WIB (contoh: 19:30 WIB)
         _jamController.text =
             "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')} WIB";
       });

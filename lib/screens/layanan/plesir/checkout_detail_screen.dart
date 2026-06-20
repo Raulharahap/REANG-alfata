@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:reang_app/providers/auth_provider.dart';
+import 'package:reang_app/services/api_service.dart';
 import 'instruksi_checkout_screen.dart';
 
 class CheckoutDetailScreen extends StatefulWidget {
+  final int targetId; // ID Wisata atau ID Event dari database
+  final String kategoriTiket; // 'wisata' atau 'event'
+  final int? varianId; // Opsional: ID Varian kelas tiket jika kategori 'event'
   final String title;
   final String location;
   final String price;
@@ -10,6 +16,9 @@ class CheckoutDetailScreen extends StatefulWidget {
 
   const CheckoutDetailScreen({
     super.key,
+    required this.targetId,
+    required this.kategoriTiket,
+    this.varianId,
     required this.title,
     required this.location,
     required this.price,
@@ -21,23 +30,13 @@ class CheckoutDetailScreen extends StatefulWidget {
 }
 
 class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
+  final ApiService _apiService = ApiService();
   String _selectedPaymentMethod = 'OVO';
 
   // --- STATE DINAMIS ---
   int _ticketCount = 1;
   DateTime? _visitDate;
-
-  // Fungsi pintar untuk memastikan URL gambar selalu valid
-  String _getValidImageUrl(String path) {
-    if (path.isEmpty) return '';
-    // Jika path sudah berupa link internet lengkap, langsung pakai
-    if (path.startsWith('http')) return path;
-
-    // Jika berupa path mentah dari database, tambahkan domain backend
-    const String domainHost =
-        'https://c4eb-2402-8780-103b-abc-d45e-c0c5-b397-1bce.ngrok-free.app';
-    return '$domainHost/storage/$path';
-  }
+  bool _isProcessing = false; // State loading saat klik beli
 
   // Fungsi untuk ekstrak angka dari string harga (misal "Rp 50.000" jadi 50000)
   int get _basePrice {
@@ -78,7 +77,7 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
     }
   }
 
-  // Helper untuk format tanggal (Contoh: 24 Okt 2026)
+  // Helper untuk format tanggal (Contoh: 2026-06-20)
   String _getFormattedDate() {
     if (_visitDate == null) return "Pilih Tanggal";
     final List<String> months = [
@@ -96,6 +95,77 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
       'Des',
     ];
     return "${_visitDate!.day} ${months[_visitDate!.month - 1]} ${_visitDate!.year}";
+  }
+
+  // --- FUNGSI EKSEKUSI CHECKOUT KE API ---
+  Future<void> _handleCheckout(int totalPrice) async {
+    if (widget.kategoriTiket == 'wisata' && _visitDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Silakan pilih tanggal kunjungan terlebih dahulu!'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final auth = context.read<AuthProvider>();
+    if (auth.token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sesi Anda berakhir, silakan login ulang.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+
+    try {
+      // Ambil format tanggal YYYY-MM-DD untuk backend
+      String? tanggalKunjunganFormatted = _visitDate != null
+          ? "${_visitDate!.year}-${_visitDate!.month.toString().padLeft(2, '0')}-${_visitDate!.day.toString().padLeft(2, '0')}"
+          : null;
+
+      final result = await _apiService.checkoutTiketPlesir(
+        token: auth.token!,
+        kategoriTiket: widget.kategoriTiket,
+        jumlahTiket: _ticketCount,
+        totalHarga: totalPrice,
+        wisataId: widget.kategoriTiket == 'wisata' ? widget.targetId : null,
+        eventId: widget.kategoriTiket == 'event' ? widget.targetId : null,
+        varianId: widget.varianId,
+        tanggalKunjungan: tanggalKunjunganFormatted,
+      );
+
+      if (mounted) {
+        // Ambil ID Transaksi yang dihasilkan oleh Laravel
+        final int transaksiId = result['data']['id'];
+
+        // Navigasi ke halaman Instruksi dengan membawa ID Transaksi untuk upload bukti transfer
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => InstruksiCheckoutScreen(
+              transaksiId: transaksiId,
+              totalHarga: totalPrice,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
   }
 
   @override
@@ -162,7 +232,6 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // CONTAINER GAMBAR YANG LEBIH TAHAN BANTING
                       Container(
                         width: 80,
                         height: 80,
@@ -173,28 +242,12 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(14),
                           child: Image.network(
-                            _getValidImageUrl(
-                              widget.imageUrl,
-                            ), // Menggunakan helper pembersih URL
+                            widget.imageUrl,
                             width: 80,
                             height: 80,
                             fit: BoxFit.cover,
-                            // 👇 INI OBATNYA AGAR NGROK TIDAK ERROR 403 👇
                             headers: const {
                               'ngrok-skip-browser-warning': 'true',
-                            },
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  value:
-                                      loadingProgress.expectedTotalBytes != null
-                                      ? loadingProgress.cumulativeBytesLoaded /
-                                            loadingProgress.expectedTotalBytes!
-                                      : null,
-                                ),
-                              );
                             },
                             errorBuilder: (context, error, stackTrace) {
                               return const Center(
@@ -254,60 +307,62 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                   const Divider(color: Color(0xffedf2f7), thickness: 1),
                   const SizedBox(height: 16),
 
-                  // --- Tanggal Kunjungan (Bisa di-klik) ---
-                  const Text(
-                    'JADWAL KUNJUNGAN',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.bold,
+                  // --- Tanggal Kunjungan (Hanya Muncul jika kategori Wisata) ---
+                  if (widget.kategoriTiket == 'wisata') ...[
+                    const Text(
+                      'JADWAL KUNJUNGAN',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  InkWell(
-                    onTap: () => _selectDate(context),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.blue.shade100),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.calendar_month,
-                                color: Color(0xFF0D6EFD),
-                                size: 18,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _getFormattedDate(),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () => _selectDate(context),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.blue.shade100),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.calendar_month,
                                   color: Color(0xFF0D6EFD),
+                                  size: 18,
                                 ),
-                              ),
-                            ],
-                          ),
-                          const Icon(
-                            Icons.edit,
-                            size: 16,
-                            color: Color(0xFF0D6EFD),
-                          ),
-                        ],
+                                const SizedBox(width: 8),
+                                Text(
+                                  _getFormattedDate(),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Color(0xFF0D6EFD),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Icon(
+                              Icons.edit,
+                              size: 16,
+                              color: Color(0xFF0D6EFD),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 20),
+                  ],
 
                   // --- Jumlah Tiket (+/-) ---
                   Row(
@@ -416,10 +471,7 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                     _formatRupiah(totalPrice),
                   ),
                   const SizedBox(height: 10),
-                  _buildPriceRow(
-                    'Biaya Layanan',
-                    'Rp 0',
-                  ), // Dummy biaya layanan
+                  _buildPriceRow('Biaya Layanan', 'Rp 0'),
                   const SizedBox(height: 16),
                   const Divider(color: Color(0xffedf2f7), thickness: 1),
                   const SizedBox(height: 16),
@@ -459,10 +511,8 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
               ),
             ),
             const SizedBox(height: 12),
-
-            // Note: Data ini hardcode, bisa diganti pakai List/API nanti
             const Text(
-              'E-Wallet',
+              'Transfer Manual',
               style: TextStyle(
                 fontSize: 13,
                 color: Colors.black87,
@@ -487,26 +537,7 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
               Icons.account_balance_wallet_rounded,
               Colors.blue,
             ),
-            const SizedBox(height: 16),
-
-            const Text(
-              'Transfer Bank',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _buildPaymentMethodItem(
-              'Transfer Virtual Account',
-              Icons.account_balance,
-              Colors.teal,
-            ),
-
-            const SizedBox(
-              height: 100,
-            ), // Spacing agar tidak tertutup tombol bawah
+            const SizedBox(height: 100),
           ],
         ),
       ),
@@ -529,27 +560,9 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
             width: double.infinity,
             height: 54,
             child: ElevatedButton(
-              onPressed: () {
-                if (_visitDate == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Silakan pilih tanggal kunjungan terlebih dahulu!',
-                      ),
-                      backgroundColor: Colors.orange,
-                    ),
-                  );
-                  return;
-                }
-
-                // Navigasi ke halaman Instruksi
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const InstruksiCheckoutScreen(),
-                  ),
-                );
-              },
+              onPressed: _isProcessing
+                  ? null
+                  : () => _handleCheckout(totalPrice),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0D6EFD),
                 foregroundColor: Colors.white,
@@ -558,10 +571,15 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                 ),
                 elevation: 2,
               ),
-              child: const Text(
-                'Lanjutkan Pembayaran',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              child: _isProcessing
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text(
+                      'Lanjutkan Pembayaran',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
             ),
           ),
         ),

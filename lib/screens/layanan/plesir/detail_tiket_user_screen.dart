@@ -15,7 +15,7 @@ class DetailTiketUserScreen extends StatefulWidget {
 class _DetailTiketUserScreenState extends State<DetailTiketUserScreen> {
   final PageController _pageController = PageController();
   int _currentImageIndex = 0;
-  List<String> _allImages = [];
+  final List<String> _allImages = [];
 
   @override
   void initState() {
@@ -41,13 +41,6 @@ class _DetailTiketUserScreenState extends State<DetailTiketUserScreen> {
     if (_allImages.isEmpty) {
       _allImages.add('');
     }
-  }
-
-  String _getImageUrl(String path) {
-    if (path.isEmpty) return '';
-    const String domainHost =
-        'https://c4eb-2402-8780-103b-abc-d45e-c0c5-b397-1bce.ngrok-free.app';
-    return '$domainHost/storage/$path';
   }
 
   // ===========================================================================
@@ -200,16 +193,19 @@ class _DetailTiketUserScreenState extends State<DetailTiketUserScreen> {
                           ? null // Disable tombol kalau belum pilih
                           : () {
                               Navigator.pop(context); // Tutup pop-up
-                              // Lanjut ke Checkout dengan membawa varian yang dipilih
+                              // Lanjut ke Checkout dengan membawa varian dan ID target
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => CheckoutDetailScreen(
+                                    targetId: item.id!, // ID Event
+                                    kategoriTiket: 'event', // Kategori Event
+                                    varianId: selectedVariant!
+                                        .id, // ID Varian Kelas Tiket
                                     title:
-                                        "$title - ${selectedVariant!.namaKelas}", // Tambah info varian
+                                        "$title - ${selectedVariant!.namaKelas}",
                                     location: location,
-                                    price:
-                                        "Rp ${selectedVariant!.harga}", // Harga sesuai varian
+                                    price: "Rp ${selectedVariant!.harga}",
                                     imageUrl: imageUrl,
                                   ),
                                 ),
@@ -349,7 +345,7 @@ class _DetailTiketUserScreenState extends State<DetailTiketUserScreen> {
             child: Column(
               children: [
                 // Ruang kosong agar gambar background terlihat
-                SizedBox(height: 250),
+                const SizedBox(height: 250),
 
                 // KONTEN OVERLAPPING CARD (Putih melengkung ke atas)
                 Container(
@@ -679,6 +675,10 @@ class _DetailTiketUserScreenState extends State<DetailTiketUserScreen> {
                                     MaterialPageRoute(
                                       builder: (context) =>
                                           CheckoutDetailScreen(
+                                            targetId:
+                                                item.id!, // Kirim ID Wisata
+                                            kategoriTiket:
+                                                'wisata', // Kategori Wisata
                                             title: title,
                                             location: location,
                                             price: finalPrice,

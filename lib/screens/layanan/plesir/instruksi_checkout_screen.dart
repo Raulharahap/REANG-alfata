@@ -1,23 +1,125 @@
-// File: lib/screens/layanan/plesir/instruksi_checkout_screen.dart
-
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_styled_toast/flutter_styled_toast.dart';
+import 'package:reang_app/providers/auth_provider.dart';
+import 'package:reang_app/services/api_service.dart';
 
-class InstruksiCheckoutScreen extends StatelessWidget {
-  const InstruksiCheckoutScreen({super.key});
+class InstruksiCheckoutScreen extends StatefulWidget {
+  // 1. Tambahkan parameter penerima data dari CheckoutDetailScreen
+  final int transaksiId;
+  final int totalHarga;
+
+  const InstruksiCheckoutScreen({
+    super.key,
+    required this.transaksiId,
+    required this.totalHarga,
+  });
+
+  @override
+  State<InstruksiCheckoutScreen> createState() =>
+      _InstruksiCheckoutScreenState();
+}
+
+class _InstruksiCheckoutScreenState extends State<InstruksiCheckoutScreen> {
+  // --- STATE & SERVICE ---
+  final ApiService _apiService = ApiService();
+  final ImagePicker _picker = ImagePicker();
+
+  File? _imageFile;
+  bool _isUploading = false;
+
+  // --- FUNGSI FORMAT RUPIAH ---
+  String _formatRupiah(int number) {
+    final formatCurrency = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    return formatCurrency.format(number);
+  }
+
+  // --- FUNGSI PILIH GAMBAR ---
+  Future<void> _pickImage() async {
+    try {
+      final pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80, // Kompresi gambar agar tidak berat
+      );
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      showToast(
+        'Gagal memilih gambar',
+        context: context,
+        backgroundColor: Colors.red,
+      );
+    }
+  }
+
+  // --- FUNGSI UPLOAD BUKTI KE API ---
+  Future<void> _uploadBukti() async {
+    if (_imageFile == null) return;
+
+    final auth = context.read<AuthProvider>();
+    if (auth.token == null) {
+      showToast(
+        'Sesi berakhir, silakan login ulang',
+        context: context,
+        backgroundColor: Colors.red,
+      );
+      return;
+    }
+
+    setState(() => _isUploading = true);
+
+    try {
+      await _apiService.uploadBuktiPlesir(
+        token: auth.token!,
+        transaksiId: widget.transaksiId,
+        imageFile: _imageFile!,
+      );
+
+      if (mounted) {
+        showToast(
+          'Bukti berhasil diunggah! Menunggu konfirmasi admin.',
+          context: context,
+          backgroundColor: Colors.green,
+          position: StyledToastPosition.bottom,
+          duration: const Duration(seconds: 4),
+        );
+
+        // Mundur 2 halaman (kembali ke menu Plesir/Home)
+        int count = 0;
+        Navigator.popUntil(context, (route) {
+          return count++ == 2;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        showToast(
+          e.toString().replaceAll('Exception: ', ''),
+          context: context,
+          backgroundColor: Colors.red,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Definisi warna sesuai mockup gambar pembeli
-    const Color primaryBlue = Color(
-      0xFF345F90,
-    ); // Biru gelap untuk button utama & teks harga
-    const Color cardBgColor = Color(
-      0xFFE5E7EB,
-    ); // Abu-abu muda untuk card total pembayaran
-    const Color infoCardBg = Color(
-      0xFFF3F4F6,
-    ); // Latar belakang card detail rekening (lembut)
+    // Definisi warna sesuai mockup
+    const Color primaryBlue = Color(0xFF345F90);
+    const Color cardBgColor = Color(0xFFE5E7EB);
+    const Color infoCardBg = Color(0xFFF3F4F6);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -56,9 +158,9 @@ class InstruksiCheckoutScreen extends StatelessWidget {
                       color: cardBgColor.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Column(
+                    child: Column(
                       children: [
-                        Text(
+                        const Text(
                           'Total Pembayaran',
                           style: TextStyle(
                             fontSize: 16,
@@ -66,18 +168,20 @@ class InstruksiCheckoutScreen extends StatelessWidget {
                             color: Colors.black87,
                           ),
                         ),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 8),
                         Text(
-                          'Rp 10.005',
-                          style: TextStyle(
+                          _formatRupiah(
+                            widget.totalHarga,
+                          ), // Dinamis dari halaman checkout
+                          style: const TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
                             color: primaryBlue,
                           ),
                         ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Selesaikan pembayaran sebelum 06 Nov, 12:00',
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Selesaikan pembayaran sebelum 1x24 Jam',
                           style: TextStyle(
                             fontSize: 13,
                             color: Colors.red,
@@ -100,15 +204,18 @@ class InstruksiCheckoutScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'No. Transaksi: TRX-6A26D2C30551B',
-                          style: TextStyle(color: Colors.black54, fontSize: 13),
+                        Text(
+                          'No. Transaksi: TRX-${widget.transaksiId}PLSR', // Dinamis
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            fontSize: 13,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         const Divider(color: Colors.black12, thickness: 1),
                         const SizedBox(height: 12),
                         const Text(
-                          'tf',
+                          'Transfer Bank',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -127,7 +234,7 @@ class InstruksiCheckoutScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          'a/n kiki',
+                          'a/n REANG App',
                           style: TextStyle(fontSize: 15, color: Colors.black87),
                         ),
                         const SizedBox(height: 20),
@@ -173,10 +280,10 @@ class InstruksiCheckoutScreen extends StatelessWidget {
                         const SizedBox(height: 12),
 
                         // Baris Total Tagihan
-                        const Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
+                            const Text(
                               'Total Tagihan',
                               style: TextStyle(
                                 fontSize: 15,
@@ -184,8 +291,8 @@ class InstruksiCheckoutScreen extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              'Rp 10.005',
-                              style: TextStyle(
+                              _formatRupiah(widget.totalHarga), // Dinamis
+                              style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.black87,
@@ -195,19 +302,65 @@ class InstruksiCheckoutScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 24),
 
-                        // Tombol Upload Bukti Pembayaran
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            // Implemetasi upload bukti pembayaran di sini
-                          },
-                          icon: const Icon(
-                            Icons.file_upload_outlined,
-                            color: Colors.white,
-                            size: 20,
+                        // --- AREA PREVIEW GAMBAR ---
+                        if (_imageFile != null) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(
+                              _imageFile!,
+                              width: double.infinity,
+                              height: 180,
+                              fit: BoxFit.cover,
+                            ),
                           ),
-                          label: const Text(
-                            'Upload Bukti Pembayaran',
-                            style: TextStyle(
+                          const SizedBox(height: 12),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: _isUploading ? null : _pickImage,
+                              icon: const Icon(
+                                Icons.refresh,
+                                color: primaryBlue,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                'Ganti Foto',
+                                style: TextStyle(color: primaryBlue),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+
+                        // Tombol Action Utama (Pilih Foto atau Upload)
+                        ElevatedButton.icon(
+                          onPressed: _isUploading
+                              ? null
+                              : (_imageFile == null
+                                    ? _pickImage
+                                    : _uploadBukti),
+                          icon: _isUploading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Icon(
+                                  _imageFile == null
+                                      ? Icons.photo_library_outlined
+                                      : Icons.cloud_upload_outlined,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                          label: Text(
+                            _isUploading
+                                ? 'Mengunggah...'
+                                : (_imageFile == null
+                                      ? 'Pilih Foto Bukti Transfer'
+                                      : 'Kirim Bukti Pembayaran'),
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 15,
                               fontWeight: FontWeight.w500,
@@ -230,7 +383,7 @@ class InstruksiCheckoutScreen extends StatelessWidget {
             ),
           ),
 
-          // 3. Tombol Bottom Sticky "Lihat Pesanan Saya"
+          // 3. Tombol Bottom Sticky "Selesai / Kembali"
           Container(
             padding: const EdgeInsets.only(
               left: 20,
@@ -246,7 +399,11 @@ class InstruksiCheckoutScreen extends StatelessWidget {
             ),
             child: ElevatedButton(
               onPressed: () {
-                // Navigasi ke halaman daftar pesanan
+                // Navigasi kembali ke menu Plesir atau Halaman Tiket Saya
+                int count = 0;
+                Navigator.popUntil(context, (route) {
+                  return count++ == 2;
+                });
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryBlue,

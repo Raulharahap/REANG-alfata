@@ -41,6 +41,7 @@ import 'package:reang_app/models/dumas_analitik_model.dart';
 import 'package:reang_app/models/mitra_plesir_model.dart';
 import 'package:reang_app/models/tiket_wisata_model.dart';
 import 'package:reang_app/models/tiket_event_model.dart';
+import 'package:reang_app/models/tiket_user_model.dart';
 import 'dart:convert';
 
 /// Kelas ini bertanggung jawab untuk semua komunikasi dengan API eksternal.
@@ -52,7 +53,7 @@ class ApiService {
   // =======================================================================
   // Backend lokal
   final String _baseUrlBackend =
-      'https://5733-2402-8780-103b-abc-842d-4119-b97d-5c91.ngrok-free.app/api';
+      'https://fd63-2402-8780-103b-abc-f5a5-772c-3137-6674.ngrok-free.app/api';
 
   // =======================================================================
   // API BERITA (EKSTERNAL)
@@ -3768,6 +3769,321 @@ class ApiService {
     } on DioException catch (e) {
       throw Exception(
         e.response?.data['message'] ?? "Gagal memuat data explore.",
+      );
+    }
+  }
+  // ===========================================================================
+  // ===========================================================================
+  // --- API TRANSAKSI PLESIR (USER / PEMBELI) ---
+  // ===========================================================================
+  // ===========================================================================
+
+  // 1. Checkout (Pesan Tiket Baru)
+  Future<Map<String, dynamic>> checkoutTiketPlesir({
+    required String token,
+    required String kategoriTiket,
+    required int jumlahTiket,
+    required int totalHarga,
+    int? wisataId,
+    int? eventId,
+    int? varianId,
+    String? tanggalKunjungan,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrlBackend/plesir/checkout',
+        data: {
+          'kategori_tiket': kategoriTiket,
+          'jumlah_tiket': jumlahTiket,
+          'total_harga': totalHarga,
+          'wisata_id': wisataId,
+          'event_id': eventId,
+          'varian_id': varianId,
+          'tanggal_kunjungan': tanggalKunjungan,
+        },
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? "Gagal melakukan checkout: ${e.message}",
+      );
+    }
+  }
+
+  // 2. Upload Foto Bukti Pembayaran
+  Future<void> uploadBuktiPlesir({
+    required String token,
+    required int transaksiId,
+    required File imageFile,
+  }) async {
+    try {
+      String fileName = imageFile.path.split('/').last;
+
+      FormData formData = FormData.fromMap({
+        'bukti_pembayaran': await MultipartFile.fromFile(
+          imageFile.path,
+          filename: fileName,
+        ),
+      });
+
+      await _dio.post(
+        '$_baseUrlBackend/plesir/transaksi/$transaksiId/upload-bukti',
+        data: formData,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ??
+            "Gagal upload bukti pembayaran: ${e.message}",
+      );
+    }
+  }
+
+  // 3. Ambil Semua Tiket Saya (Terbagi 5 Tab)
+  Future<Map<String, dynamic>> getSemuaTiketSaya(String token) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrlBackend/plesir/semua-tiket-ku',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+          },
+        ),
+      );
+
+      return response.data['data'] ?? {};
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? "Gagal memuat tiket saya: ${e.message}",
+      );
+    }
+  }
+
+  // ===========================================================================
+  // --- API TRANSAKSI PLESIR (ADMIN / MITRA) ---
+  // ===========================================================================
+
+  // 4. Ambil Pesanan Masuk (Terbagi 5 Tab untuk Dashboard Admin)
+  Future<Map<String, dynamic>> getAdminPesananMasuk(String token) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrlBackend/plesir/mitra/pesanan-masuk',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+          },
+        ),
+      );
+
+      return response.data['data'] ?? {};
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ??
+            "Gagal memuat pesanan masuk: ${e.message}",
+      );
+    }
+  }
+
+  // 5. Konfirmasi Pembayaran (Aksi: Terima atau Tolak)
+  Future<Map<String, dynamic>> konfirmasiPembayaranAdmin({
+    required String token,
+    required int transaksiId,
+    required String aksi,
+    String? keteranganAdmin,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrlBackend/plesir/mitra/transaksi/$transaksiId/konfirmasi',
+        data: {
+          // 👇 UBAH BAGIAN INI AGAR MATCH DENGAN LARAVEL 👇
+          'status': aksi,
+          'keterangan': keteranganAdmin ?? '',
+        },
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ??
+            "Gagal memproses konfirmasi: ${e.message}",
+      );
+    }
+  }
+
+  // 6. Scan Tiket (Verifikasi Kehadiran Pengunjung)
+  Future<Map<String, dynamic>> scanTiketPlesir({
+    required String token,
+    required String kodeTiket,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrlBackend/plesir/mitra/scan-tiket',
+        data: {'kode_tiket': kodeTiket},
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ??
+            "Gagal melakukan scan tiket: ${e.message}",
+      );
+    }
+  }
+  // ===========================================================================
+  // --- CRUD METODE PEMBAYARAN PLESIR (ADMIN/MITRA) ---
+  // ===========================================================================
+
+  // 1. Ambil List Metode Pembayaran
+  Future<List<dynamic>> getMetodePembayaranPlesir(String token) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrlBackend/plesir/mitra/metode-pembayaran',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+          },
+        ),
+      );
+      return response.data['data'] ?? [];
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? "Gagal memuat metode pembayaran.",
+      );
+    }
+  }
+
+  // 2. Tambah Metode Baru
+  Future<void> tambahMetodePembayaranPlesir({
+    required String token,
+    required Map<String, dynamic> dataMap,
+  }) async {
+    try {
+      // Bungkus pakai FormData karena ada potensi upload gambar (QRIS)
+      FormData formData = FormData.fromMap({
+        'nama_metode': dataMap['nama_metode'],
+        'jenis_metode': dataMap['jenis_metode'],
+        'nama_penerima': dataMap['nama_penerima'],
+        'nomor_rekening': dataMap['nomor_rekening'],
+      });
+
+      // Jika ada file gambar QRIS
+      if (dataMap['file_qris'] != null && dataMap['file_qris'] is File) {
+        File file = dataMap['file_qris'];
+        formData.files.add(
+          MapEntry(
+            'file_qris',
+            await MultipartFile.fromFile(
+              file.path,
+              filename: file.path.split('/').last,
+            ),
+          ),
+        );
+      }
+
+      await _dio.post(
+        '$_baseUrlBackend/plesir/mitra/metode-pembayaran',
+        data: formData,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? "Gagal menambah metode pembayaran.",
+      );
+    }
+  }
+
+  // 3. Update Metode (Edit)
+  Future<void> updateMetodePembayaranPlesir({
+    required String token,
+    required int id,
+    required Map<String, dynamic> dataMap,
+  }) async {
+    try {
+      FormData formData = FormData.fromMap({
+        'nama_metode': dataMap['nama_metode'],
+        'jenis_metode': dataMap['jenis_metode'],
+        'nama_penerima': dataMap['nama_penerima'],
+        'nomor_rekening': dataMap['nomor_rekening'],
+      });
+
+      if (dataMap['file_qris'] != null && dataMap['file_qris'] is File) {
+        File file = dataMap['file_qris'];
+        formData.files.add(
+          MapEntry(
+            'file_qris',
+            await MultipartFile.fromFile(
+              file.path,
+              filename: file.path.split('/').last,
+            ),
+          ),
+        );
+      }
+
+      // Pakai POST karena form-data dengan file rentan error jika pakai PUT di PHP/Laravel
+      await _dio.post(
+        '$_baseUrlBackend/plesir/mitra/metode-pembayaran/$id',
+        data: formData,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? "Gagal mengubah metode pembayaran.",
+      );
+    }
+  }
+
+  // 4. Hapus Metode
+  Future<void> hapusMetodePembayaranPlesir(String token, int id) async {
+    try {
+      await _dio.delete(
+        '$_baseUrlBackend/plesir/mitra/metode-pembayaran/$id',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? "Gagal menghapus metode pembayaran.",
       );
     }
   }
