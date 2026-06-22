@@ -102,10 +102,12 @@ class _PesanTiketScreenState extends State<PesanTiketScreen> {
 
   // --- HINT SEARCH DINAMIS ---
   String get _searchHintText {
-    if (_selectedFilterIndex == 1)
+    if (_selectedFilterIndex == 1) {
       return 'Cari destinasi wisata, pantai, museum...';
-    if (_selectedFilterIndex == 2)
+    }
+    if (_selectedFilterIndex == 2) {
       return 'Cari konser musik, festival, pameran...';
+    }
     return 'Cari pantai, konser, festival...';
   }
 
@@ -115,175 +117,202 @@ class _PesanTiketScreenState extends State<PesanTiketScreen> {
 
     return Container(
       color: const Color(0xFFF8F9FA),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // --- HEADER & SEARCH BAR ---
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Reservasi Tiket",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "Temukan pengalaman wisata dan event terbaik di sekitar Anda.",
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                ),
-                const SizedBox(height: 16),
+      // 👇 PERUBAHAN UTAMA: Membungkus semuanya di dalam RefreshIndicator & SingleChildScrollView
+      child: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF0D6EFD)),
+            )
+          : RefreshIndicator(
+              onRefresh: () => _fetchData(query: _searchController.text),
+              color: const Color(0xFF0D6EFD),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // --- HEADER & SEARCH BAR ---
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Reservasi Tiket",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "Temukan pengalaman wisata dan event terbaik di sekitar Anda.",
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
 
-                // Kolom Pencarian
-                TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: InputDecoration(
-                    hintText: _searchHintText,
-                    hintStyle: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 13,
+                          // Kolom Pencarian
+                          TextField(
+                            controller: _searchController,
+                            onChanged: _onSearchChanged,
+                            decoration: InputDecoration(
+                              hintText: _searchHintText,
+                              hintStyle: TextStyle(
+                                color: Colors.grey.shade400,
+                                fontSize: 13,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search,
+                                color: Colors.grey.shade500,
+                              ),
+                              suffixIcon: _searchController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(
+                                        Icons.clear,
+                                        color: Colors.grey,
+                                      ),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        _fetchData();
+                                      },
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: Colors.white,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 0,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: BorderSide(
+                                  color: Colors.grey.shade300,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: BorderSide(
+                                  color: Colors.grey.shade300,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF0D6EFD),
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    prefixIcon: Icon(Icons.search, color: Colors.grey.shade500),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, color: Colors.grey),
-                            onPressed: () {
-                              _searchController.clear();
-                              _fetchData();
-                            },
+                    const SizedBox(height: 16),
+
+                    // --- FILTER CHIPS ---
+                    SizedBox(
+                      height: 38,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _filters.length,
+                        itemBuilder: (context, index) {
+                          final isSelected = _selectedFilterIndex == index;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(
+                                _filters[index],
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.black87,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() {
+                                    _selectedFilterIndex = index;
+                                    _searchController.clear();
+                                  });
+                                  _fetchData();
+                                }
+                              },
+                              selectedColor: const Color(0xFF0D6EFD),
+                              backgroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                side: BorderSide(
+                                  color: isSelected
+                                      ? const Color(0xFF0D6EFD)
+                                      : Colors.grey.shade300,
+                                ),
+                              ),
+                              showCheckmark: false,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // --- KONTEN LIST TIKET ---
+                    items.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 40.0),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.search_off_rounded,
+                                    size: 60,
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    "Tiket belum tersedia",
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    "Coba ganti kata kunci atau kategori pencarian",
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(
+                                    height: 40,
+                                  ), // Jarak bawah agar rapi
+                                ],
+                              ),
+                            ),
                           )
-                        : null,
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF0D6EFD),
-                        width: 1.5,
-                      ),
-                    ),
-                  ),
+                        : ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            // 👇 PERUBAHAN UTAMA: Matikan scroll internal ListView agar ikut scroll induknya
+                            physics: const NeverScrollableScrollPhysics(),
+                            shrinkWrap: true,
+                            itemCount: items.length,
+                            itemBuilder: (context, index) {
+                              return _buildDynamicTicketCard(items[index]);
+                            },
+                          ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // --- FILTER CHIPS ---
-          SizedBox(
-            height: 38,
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              itemCount: _filters.length,
-              itemBuilder: (context, index) {
-                final isSelected = _selectedFilterIndex == index;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(
-                      _filters[index],
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.black87,
-                        fontWeight: isSelected
-                            ? FontWeight.bold
-                            : FontWeight.w500,
-                      ),
-                    ),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() {
-                          _selectedFilterIndex = index;
-                          _searchController.clear();
-                        });
-                        _fetchData();
-                      }
-                    },
-                    selectedColor: const Color(0xFF0D6EFD),
-                    backgroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(
-                        color: isSelected
-                            ? const Color(0xFF0D6EFD)
-                            : Colors.grey.shade300,
-                      ),
-                    ),
-                    showCheckmark: false,
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // --- KONTEN LIST ---
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF0D6EFD)),
-                  )
-                : items.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off_rounded,
-                          size: 60,
-                          color: Colors.grey.shade300,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          "Tiket belum tersedia",
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "Coba ganti kata kunci atau kategori pencarian",
-                          style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: () => _fetchData(query: _searchController.text),
-                    color: const Color(0xFF0D6EFD),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        return _buildDynamicTicketCard(items[index]);
-                      },
-                    ),
-                  ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -382,9 +411,7 @@ class _PesanTiketScreenState extends State<PesanTiketScreen> {
                       height: 180,
                       width: double.infinity,
                       fit: BoxFit.cover,
-                      // 👇 INI OBATNYA AGAR NGROK TIDAK ERROR 403 👇
                       headers: const {'ngrok-skip-browser-warning': 'true'},
-                      // Tambahan animasi loading agar UI lebih premium saat koneksi lambat
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
                         return Container(
@@ -414,7 +441,6 @@ class _PesanTiketScreenState extends State<PesanTiketScreen> {
                     ),
                   ),
                 ),
-
                 Positioned(
                   top: 12,
                   left: 12,
@@ -449,7 +475,6 @@ class _PesanTiketScreenState extends State<PesanTiketScreen> {
                     ),
                   ),
                 ),
-
                 Positioned(
                   top: 12,
                   right: 12,

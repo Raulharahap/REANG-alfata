@@ -31,27 +31,61 @@ class CheckoutDetailScreen extends StatefulWidget {
 
 class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
   final ApiService _apiService = ApiService();
-  String _selectedPaymentMethod = 'OVO';
 
   // --- STATE DINAMIS ---
   int _ticketCount = 1;
   DateTime? _visitDate;
-  bool _isProcessing = false; // State loading saat klik beli
+  bool _isProcessing = false;
 
-  // Fungsi untuk ekstrak angka dari string harga (misal "Rp 50.000" jadi 50000)
+  // --- STATE METODE PEMBAYARAN ---
+  List<dynamic> _listMetode = [];
+  bool _isLoadingMetode = true;
+  Map<String, dynamic>?
+  _selectedPaymentMethod; // Menyimpan objek metode yang dipilih
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMetodePembayaran();
+  }
+
+  // Menarik Metode Pembayaran milik Mitra
+  Future<void> _fetchMetodePembayaran() async {
+    try {
+      final data = await _apiService.getMetodeCheckoutPlesir(
+        kategori: widget.kategoriTiket,
+        targetId: widget.targetId,
+      );
+      if (mounted) {
+        setState(() {
+          _listMetode = data;
+          if (_listMetode.isNotEmpty) {
+            _selectedPaymentMethod =
+                _listMetode.first; // Default pilih item pertama
+          }
+          _isLoadingMetode = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingMetode = false);
+      }
+    }
+  }
+
+  // Ekstrak harga
   int get _basePrice {
     final cleanString = widget.price.replaceAll(RegExp(r'[^0-9]'), '');
     return int.tryParse(cleanString) ?? 0;
   }
 
-  // Fungsi untuk format angka ke Rupiah yang rapi
+  // Format rupiah
   String _formatRupiah(int number) {
-    final formatCurrency = NumberFormat.currency(
+    return NumberFormat.currency(
       locale: 'id_ID',
       symbol: 'Rp ',
       decimalDigits: 0,
-    );
-    return formatCurrency.format(number);
+    ).format(number);
   }
 
   // Pemilih Kalender
@@ -71,13 +105,10 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
       },
     );
     if (picked != null && picked != _visitDate) {
-      setState(() {
-        _visitDate = picked;
-      });
+      setState(() => _visitDate = picked);
     }
   }
 
-  // Helper untuk format tanggal (Contoh: 2026-06-20)
   String _getFormattedDate() {
     if (_visitDate == null) return "Pilih Tanggal";
     final List<String> months = [
@@ -97,7 +128,7 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
     return "${_visitDate!.day} ${months[_visitDate!.month - 1]} ${_visitDate!.year}";
   }
 
-  // --- FUNGSI EKSEKUSI CHECKOUT KE API ---
+  // --- FUNGSI EKSEKUSI CHECKOUT ---
   Future<void> _handleCheckout(int totalPrice) async {
     if (widget.kategoriTiket == 'wisata' && _visitDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -109,22 +140,23 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
       return;
     }
 
-    final auth = context.read<AuthProvider>();
-    if (auth.token == null) {
+    if (_selectedPaymentMethod == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Sesi Anda berakhir, silakan login ulang.'),
+          content: Text('Mitra belum menyediakan metode pembayaran.'),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
+    final auth = context.read<AuthProvider>();
+    if (auth.token == null) return;
+
     setState(() => _isProcessing = true);
 
     try {
-      // Ambil format tanggal YYYY-MM-DD untuk backend
-      String? tanggalKunjunganFormatted = _visitDate != null
+      String? tanggalKunjungan = _visitDate != null
           ? "${_visitDate!.year}-${_visitDate!.month.toString().padLeft(2, '0')}-${_visitDate!.day.toString().padLeft(2, '0')}"
           : null;
 
@@ -136,20 +168,20 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
         wisataId: widget.kategoriTiket == 'wisata' ? widget.targetId : null,
         eventId: widget.kategoriTiket == 'event' ? widget.targetId : null,
         varianId: widget.varianId,
-        tanggalKunjungan: tanggalKunjunganFormatted,
+        tanggalKunjungan: tanggalKunjungan,
+        // 👇 PERBAIKAN: INI YANG TADI KELUPAAN! KITA KIRIMKAN ID METODENYA
+        metodePembayaranId: _selectedPaymentMethod!['id'],
       );
 
       if (mounted) {
-        // Ambil ID Transaksi yang dihasilkan oleh Laravel
         final int transaksiId = result['data']['id'];
-
-        // Navigasi ke halaman Instruksi dengan membawa ID Transaksi untuk upload bukti transfer
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => InstruksiCheckoutScreen(
               transaksiId: transaksiId,
               totalHarga: totalPrice,
+              selectedMetode: _selectedPaymentMethod!,
             ),
           ),
         );
@@ -211,7 +243,7 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
             ),
             const SizedBox(height: 24),
 
-            // ================= CARD 1: DETAIL TIKET & DESTINASI =================
+            // ================= CARD 1: DETAIL TIKET =================
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -232,31 +264,21 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: Image.network(
-                            widget.imageUrl,
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.network(
+                          widget.imageUrl,
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => Container(
                             width: 80,
                             height: 80,
-                            fit: BoxFit.cover,
-                            headers: const {
-                              'ngrok-skip-browser-warning': 'true',
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Center(
-                                child: Icon(
-                                  Icons.broken_image,
-                                  color: Colors.grey,
-                                ),
-                              );
-                            },
+                            color: Colors.grey.shade200,
+                            child: const Icon(
+                              Icons.broken_image,
+                              color: Colors.grey,
+                            ),
                           ),
                         ),
                       ),
@@ -307,7 +329,6 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                   const Divider(color: Color(0xffedf2f7), thickness: 1),
                   const SizedBox(height: 16),
 
-                  // --- Tanggal Kunjungan (Hanya Muncul jika kategori Wisata) ---
                   if (widget.kategoriTiket == 'wisata') ...[
                     const Text(
                       'JADWAL KUNJUNGAN',
@@ -322,10 +343,7 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                       onTap: () => _selectDate(context),
                       borderRadius: BorderRadius.circular(10),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(10),
@@ -364,7 +382,6 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                     const SizedBox(height: 20),
                   ],
 
-                  // --- Jumlah Tiket (+/-) ---
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -445,13 +462,6 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.grey.shade200),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
               padding: const EdgeInsets.all(20.0),
               child: Column(
@@ -511,32 +521,32 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Transfer Manual',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-                fontWeight: FontWeight.w600,
+
+            if (_isLoadingMetode)
+              const Center(child: CircularProgressIndicator())
+            else if (_listMetode.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: const Text(
+                  'Maaf, Mitra ini belum mendaftarkan metode pembayaran.',
+                  style: TextStyle(color: Colors.red),
+                ),
+              )
+            else
+              Column(
+                children: _listMetode.map((metode) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: _buildPaymentMethodItem(metode),
+                  );
+                }).toList(),
               ),
-            ),
-            const SizedBox(height: 8),
-            _buildPaymentMethodItem(
-              'OVO',
-              Icons.account_balance_wallet_outlined,
-              Colors.purple,
-            ),
-            const SizedBox(height: 8),
-            _buildPaymentMethodItem(
-              'GoPay',
-              Icons.add_moderator_outlined,
-              Colors.green,
-            ),
-            const SizedBox(height: 8),
-            _buildPaymentMethodItem(
-              'Dana',
-              Icons.account_balance_wallet_rounded,
-              Colors.blue,
-            ),
+
             const SizedBox(height: 100),
           ],
         ),
@@ -560,7 +570,7 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
             width: double.infinity,
             height: 54,
             child: ElevatedButton(
-              onPressed: _isProcessing
+              onPressed: _isProcessing || _selectedPaymentMethod == null
                   ? null
                   : () => _handleCheckout(totalPrice),
               style: ElevatedButton.styleFrom(
@@ -569,7 +579,6 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
-                elevation: 2,
               ),
               child: _isProcessing
                   ? const CircularProgressIndicator(color: Colors.white)
@@ -607,10 +616,21 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
     );
   }
 
-  Widget _buildPaymentMethodItem(String name, IconData icon, Color iconColor) {
-    bool isSelected = _selectedPaymentMethod == name;
+  Widget _buildPaymentMethodItem(dynamic metode) {
+    bool isSelected = _selectedPaymentMethod?['id'] == metode['id'];
+    Color iconColor = Colors.blue;
+    IconData icon = Icons.account_balance_wallet;
+
+    if (metode['jenis_metode'] == 'QRIS') {
+      iconColor = Colors.purple;
+      icon = Icons.qr_code_2;
+    } else if (metode['jenis_metode'] == 'COD') {
+      iconColor = Colors.green;
+      icon = Icons.delivery_dining;
+    }
+
     return InkWell(
-      onTap: () => setState(() => _selectedPaymentMethod = name),
+      onTap: () => setState(() => _selectedPaymentMethod = metode),
       borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
@@ -636,15 +656,27 @@ class _CheckoutDetailScreenState extends State<CheckoutDetailScreen> {
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(
-                name,
-                style: TextStyle(
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                  fontSize: 14,
-                  color: isSelected
-                      ? const Color(0xFF0D6EFD)
-                      : const Color(0xff334155),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    metode['nama_metode'],
+                    style: TextStyle(
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w600,
+                      fontSize: 14,
+                      color: isSelected
+                          ? const Color(0xFF0D6EFD)
+                          : const Color(0xff334155),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    metode['jenis_metode'],
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
               ),
             ),
             if (isSelected)

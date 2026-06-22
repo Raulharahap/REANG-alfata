@@ -53,7 +53,7 @@ class ApiService {
   // =======================================================================
   // Backend lokal
   final String _baseUrlBackend =
-      'https://fd63-2402-8780-103b-abc-f5a5-772c-3137-6674.ngrok-free.app/api';
+      'https://aed7-2402-8780-103b-abc-154b-baf2-a16c-a7d3.ngrok-free.app/api';
 
   // =======================================================================
   // API BERITA (EKSTERNAL)
@@ -2974,9 +2974,12 @@ class ApiService {
   }
 
   // =======================================================================
-  // ambil daftar notifikasi
+  // 1. Ambil daftar notifikasi (Gabungan Umum & Plesir)
   // =======================================================================
   Future<List<NotificationModel>> fetchNotifications(String token) async {
+    List<NotificationModel> allNotifs = [];
+
+    // A. Ambil Notif Umum
     try {
       final response = await _dio.get(
         '$_baseUrlBackend/notifications',
@@ -2984,62 +2987,127 @@ class ApiService {
       );
 
       if (response.statusCode == 200) {
-        // Pastikan key 'data' ada dan berupa List
         if (response.data['data'] != null && response.data['data'] is List) {
           final List data = response.data['data'];
-          return data.map((json) => NotificationModel.fromJson(json)).toList();
+          allNotifs.addAll(
+            data.map((json) => NotificationModel.fromJson(json)).toList(),
+          );
         }
       }
-      return []; // Kembalikan list kosong jika status bukan 200 atau format salah
     } catch (e) {
-      debugPrint("API Error Notif: $e");
-      return []; // Kembalikan list kosong jika error koneksi (jangan throw)
+      debugPrint("API Error Notif Umum: $e");
     }
-  }
 
-  // 2. Tandai Satu Dibaca (Saat diklik)
-  Future<void> markNotificationRead(String token, int id) async {
+    // B. Ambil Notif Plesir
     try {
-      await _dio.post(
-        '$_baseUrlBackend/notifications/read/$id',
+      final responsePlesir = await _dio.get(
+        '$_baseUrlBackend/plesir/user/notifikasi',
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
+
+      if (responsePlesir.statusCode == 200 &&
+          responsePlesir.data['status'] == 'success') {
+        final List plesirData = responsePlesir.data['data'];
+        final plesirNotifs = plesirData
+            .map(
+              (item) => NotificationModel(
+                id: item['id'],
+                title: item['judul'],
+                body: item['pesan'],
+                type: 'plesir', // Tipe khusus plesir
+                dataId: item['transaksi_id'].toString(),
+                isRead: item['is_read'],
+                createdAt: DateTime.parse(item['created_at']),
+              ),
+            )
+            .toList();
+
+        allNotifs.addAll(plesirNotifs);
+      }
+    } catch (e) {
+      debugPrint("API Error Notif Plesir: $e");
+    }
+
+    // Urutkan semua notifikasi dari yang paling baru
+    allNotifs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return allNotifs;
+  }
+
+  // =======================================================================
+  // 2. Tandai Satu Dibaca (Saat diklik)
+  // =======================================================================
+  Future<void> markNotificationRead(
+    String token,
+    int id, {
+    String? type,
+  }) async {
+    try {
+      if (type != 'plesir') {
+        await _dio.post(
+          '$_baseUrlBackend/notifications/read/$id',
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
+      }
+      // Untuk Plesir, karena backend hanya punya "tandai semua", kita biarkan UI-nya saja yang optimis berubah.
     } catch (e) {
       // Silent error
     }
   }
 
-  // 3. Tandai Semua Dibaca
+  // =======================================================================
+  // 3. Tandai Semua Dibaca (Gabungan)
+  // =======================================================================
   Future<bool> markAllNotificationsRead(String token) async {
+    bool success = false;
     try {
-      final response = await _dio.post(
+      final res1 = await _dio.post(
         '$_baseUrlBackend/notifications/read-all',
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
+      if (res1.statusCode == 200) success = true;
+    } catch (e) {}
+
+    try {
+      final res2 = await _dio.post(
+        '$_baseUrlBackend/plesir/user/notifikasi/mark-read',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      if (res2.statusCode == 200) success = true;
+    } catch (e) {}
+
+    return success;
   }
 
-  // [FUNGSI BARU] Ambil jumlah notifikasi belum dibaca
+  // =======================================================================
+  // 4. Ambil jumlah notifikasi belum dibaca (Gabungan)
+  // =======================================================================
   Future<int> getUnreadNotificationCount(String token) async {
+    int totalUnread = 0;
     try {
-      final response = await _dio.get(
+      final res1 = await _dio.get(
         '$_baseUrlBackend/notifications/unread-count',
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
+      if (res1.statusCode == 200)
+        totalUnread += (res1.data['count'] ?? 0) as int;
+    } catch (e) {}
 
-      if (response.statusCode == 200) {
-        return response.data['count'] ?? 0;
+    try {
+      final res2 = await _dio.get(
+        '$_baseUrlBackend/plesir/user/notifikasi',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      if (res2.statusCode == 200 && res2.data['status'] == 'success') {
+        totalUnread += (res2.data['unread_count'] ?? 0) as int;
       }
-      return 0;
-    } catch (e) {
-      return 0; // Jika error, anggap 0 agar tidak crash
-    }
+    } catch (e) {}
+
+    return totalUnread;
   }
 
-  // [BARU] Hapus Semua Notifikasi
+  // =======================================================================
+  // 5. Hapus Semua Notifikasi
+  // =======================================================================
   Future<bool> deleteAllNotifications(String token) async {
     try {
       final response = await _dio.post(
@@ -3778,8 +3846,8 @@ class ApiService {
   // ===========================================================================
   // ===========================================================================
 
-  // 1. Checkout (Pesan Tiket Baru)
-  Future<Map<String, dynamic>> checkoutTiketPlesir({
+  // --- FUNGSI CHECKOUT TIKET PLESIR ---
+  Future<dynamic> checkoutTiketPlesir({
     required String token,
     required String kategoriTiket,
     required int jumlahTiket,
@@ -3788,10 +3856,17 @@ class ApiService {
     int? eventId,
     int? varianId,
     String? tanggalKunjungan,
+    required int metodePembayaranId, // 👇 WAJIB DITAMBAHKAN
   }) async {
     try {
       final response = await _dio.post(
         '$_baseUrlBackend/plesir/checkout',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
         data: {
           'kategori_tiket': kategoriTiket,
           'jumlah_tiket': jumlahTiket,
@@ -3800,18 +3875,13 @@ class ApiService {
           'event_id': eventId,
           'varian_id': varianId,
           'tanggal_kunjungan': tanggalKunjungan,
+          'metode_pembayaran_id': metodePembayaranId, // 👇 KIRIM KE LARAVEL
         },
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
       );
       return response.data;
     } on DioException catch (e) {
       throw Exception(
-        e.response?.data['message'] ?? "Gagal melakukan checkout: ${e.message}",
+        e.response?.data['message'] ?? 'Gagal melakukan checkout tiket',
       );
     }
   }
@@ -4023,8 +4093,10 @@ class ApiService {
       );
     }
   }
+  // =========================================================================
+  // MODUL PLESIR: METODE PEMBAYARAN & TRANSAKSI
+  // =========================================================================
 
-  // 3. Update Metode (Edit)
   Future<void> updateMetodePembayaranPlesir({
     required String token,
     required int id,
@@ -4038,20 +4110,17 @@ class ApiService {
         'nomor_rekening': dataMap['nomor_rekening'],
       });
 
+      // Jika user memilih file gambar baru dari galeri
       if (dataMap['file_qris'] != null && dataMap['file_qris'] is File) {
-        File file = dataMap['file_qris'];
         formData.files.add(
           MapEntry(
-            'file_qris',
-            await MultipartFile.fromFile(
-              file.path,
-              filename: file.path.split('/').last,
-            ),
+            'file_qris', // 👇 PERBAIKAN: Harus 'file_qris' agar cocok dengan $request->hasFile('file_qris') di Laravel
+            await MultipartFile.fromFile(dataMap['file_qris'].path),
           ),
         );
       }
 
-      // Pakai POST karena form-data dengan file rentan error jika pakai PUT di PHP/Laravel
+      // Pastikan menggunakan _dio.post karena Laravel menggunakan Route::post
       await _dio.post(
         '$_baseUrlBackend/plesir/mitra/metode-pembayaran/$id',
         data: formData,
@@ -4064,12 +4133,12 @@ class ApiService {
       );
     } on DioException catch (e) {
       throw Exception(
-        e.response?.data['message'] ?? "Gagal mengubah metode pembayaran.",
+        e.response?.data['message'] ?? 'Gagal memperbarui metode pembayaran.',
       );
     }
   }
 
-  // 4. Hapus Metode
+  // 2. Hapus Metode (Mitra)
   Future<void> hapusMetodePembayaranPlesir(String token, int id) async {
     try {
       await _dio.delete(
@@ -4085,6 +4154,206 @@ class ApiService {
       throw Exception(
         e.response?.data['message'] ?? "Gagal menghapus metode pembayaran.",
       );
+    }
+  }
+
+  // 3. Ambil Metode Pembayaran (Untuk User Checkout / Ganti Metode)
+  Future<List<dynamic>> getMetodeCheckoutPlesir({
+    required String kategori,
+    required int targetId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        // 👇 PERBAIKAN: Sesuaikan dengan rute terbaru di Laravel (api.php)
+        '$_baseUrlBackend/plesir/metode-checkout',
+        queryParameters: {'kategori': kategori, 'target_id': targetId},
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+          },
+        ),
+      );
+
+      if (response.data['status'] == 'success') {
+        return response.data['data'] ?? [];
+      }
+      return [];
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? "Gagal memuat metode pembayaran.",
+      );
+    }
+  }
+
+  // 4. Update Metode Pembayaran di Transaksi (User)
+  Future<void> updateMetodePembayaranTransaksiPlesir(
+    String token,
+    int transaksiId,
+    int metodeId,
+  ) async {
+    try {
+      await _dio.post(
+        '$_baseUrlBackend/plesir/transaksi/$transaksiId/ganti-metode',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+        data: {'metode_pembayaran_id': metodeId},
+      );
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ??
+            "Gagal menyimpan metode pembayaran baru.",
+      );
+    }
+  }
+
+  // ===========================================================================
+  // FUNGSI GET ANALITIK PLESIR
+  // ===========================================================================
+  Future<Map<String, dynamic>> getAnalitikPlesir(String token) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrlBackend/plesir/mitra/analitik',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+      return response.data['data']; // Langsung return objek datanya
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['message'] ?? "Gagal memuat data analitik",
+      );
+    }
+  }
+
+  // ===========================================================================
+  // FUNGSI TANDAI NOTIF ADMIN DIBACA
+  // ===========================================================================
+  Future<void> markNotifAdminRead(String token) async {
+    try {
+      await _dio.post(
+        '$_baseUrlBackend/plesir/mitra/notifikasi/mark-read',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+    } catch (e) {
+      debugPrint("Gagal menandai notif dibaca: $e");
+    }
+  }
+
+  // ===========================================================================
+  // FUNGSI MENGAMBIL SEMUA NOTIFIKASI (GANTI NAMA JADI GLOBAL)
+  // ===========================================================================
+  Future<List<NotificationModel>> fetchGlobalNotifications(String token) async {
+    List<NotificationModel> allNotifications = [];
+
+    // 1. --- AMBIL NOTIFIKASI UMUM (Kode Lama) ---
+    try {
+      final response = await _dio.get(
+        '$_baseUrlBackend/user/notifications', // PERHATIAN: Ganti sesuai URL aslimu jika beda
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      if (response.statusCode == 200 && response.data != null) {
+        final List dataUmum = response.data['data'] ?? response.data;
+        final umumNotifs = dataUmum
+            .map((json) => NotificationModel.fromJson(json))
+            .toList();
+        allNotifications.addAll(umumNotifs);
+      }
+    } catch (e) {
+      debugPrint("Gagal load notif umum: $e");
+    }
+
+    // 2. --- AMBIL NOTIFIKASI TIKET PLESIR ---
+    try {
+      final responsePlesir = await _dio.get(
+        '$_baseUrlBackend/plesir/user/notifikasi',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+
+      if (responsePlesir.data['status'] == 'success') {
+        final List plesirData = responsePlesir.data['data'];
+        final plesirNotifs = plesirData
+            .map(
+              (item) => NotificationModel(
+                id: item['id'],
+                title: item['judul'],
+                body: item['pesan'],
+                type: 'plesir',
+                dataId: item['transaksi_id'].toString(),
+                isRead: item['is_read'],
+                createdAt: DateTime.parse(item['created_at']),
+              ),
+            )
+            .toList();
+
+        allNotifications.addAll(plesirNotifs);
+      }
+    } catch (e) {
+      debugPrint("Gagal load notif plesir: $e");
+    }
+
+    // 3. --- URUTKAN DARI YANG PALING BARU ---
+    allNotifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    return allNotifications;
+  }
+
+  // ===========================================================================
+  // FUNGSI TANDAI 1 NOTIFIKASI DIBACA (GANTI NAMA JADI GLOBAL)
+  // ===========================================================================
+  Future<void> markGlobalNotificationRead(String token, int id) async {
+    try {
+      await _dio.post(
+        '$_baseUrlBackend/notifications/$id/read', // PERHATIAN: Ganti sesuai URL aslimu
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+    } catch (e) {
+      debugPrint("Gagal mark read 1 notif: $e");
+    }
+  }
+
+  // ===========================================================================
+  // FUNGSI TANDAI SEMUA NOTIFIKASI DIBACA (GANTI NAMA JADI GLOBAL)
+  // ===========================================================================
+  Future<void> markAllGlobalNotificationsRead(String token) async {
+    try {
+      await _dio.post(
+        '$_baseUrlBackend/notifications/mark-all-read', // PERHATIAN: Ganti sesuai URL aslimu
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+    } catch (e) {}
+
+    try {
+      await _dio.post(
+        '$_baseUrlBackend/plesir/user/notifikasi/mark-read',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+    } catch (e) {}
+  }
+
+  // ===========================================================================
+  // FUNGSI HAPUS SEMUA NOTIFIKASI (GANTI NAMA JADI GLOBAL)
+  // ===========================================================================
+  Future<void> deleteAllGlobalNotifications(String token) async {
+    try {
+      await _dio.delete(
+        '$_baseUrlBackend/notifications/delete-all', // PERHATIAN: Ganti sesuai URL aslimu
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+    } catch (e) {
+      debugPrint("Gagal delete all notif: $e");
     }
   }
 }

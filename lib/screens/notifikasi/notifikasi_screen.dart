@@ -8,12 +8,12 @@ import 'package:reang_app/screens/ecomerce/detail_order_screen.dart';
 import 'package:flutter_styled_toast/flutter_styled_toast.dart';
 import 'package:reang_app/screens/layanan/dumas/detail_laporan_screen.dart';
 import 'package:reang_app/screens/layanan/renbang/detail_usulan_screen.dart';
+// IMPORT HALAMAN TIKET SAYA PLESIR
+import 'package:reang_app/screens/layanan/plesir/tiket_saya_screen.dart';
 
 class NotifikasiScreen extends StatefulWidget {
-  // [BARU] Tambahkan variable ini
   final VoidCallback? onRefreshBadge;
 
-  // [UPDATE] Tambahkan di constructor
   const NotifikasiScreen({super.key, this.onRefreshBadge});
 
   @override
@@ -34,24 +34,20 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
 
   @override
   void dispose() {
-    // 3. Copot Listener saat halaman ditutup
     context.read<AuthProvider>().removeListener(_fetchData);
     super.dispose();
   }
 
   Future<void> _fetchData() async {
-    // 1. Nyalakan loading saat mulai
     setState(() => _isLoading = true);
 
     try {
       final auth = context.read<AuthProvider>();
 
-      // Cek apakah user login
       if (auth.token == null) {
         throw Exception("User belum login");
       }
 
-      // Panggil API
       final data = await _apiService.fetchNotifications(auth.token!);
 
       if (mounted) {
@@ -62,10 +58,7 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
       }
     } catch (e) {
       debugPrint("Error ambil notifikasi: $e");
-      // Jika error, biarkan list kosong atau tampilkan pesan
     } finally {
-      // [PENTING] Bagian ini AKAN SELALU DIJALANKAN (Sukses ataupun Error)
-      // Jadi loading pasti mati dan tampilan kosong muncul
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -75,14 +68,11 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
     }
   }
 
-  // Fungsi Tandai Semua Dibaca
   Future<void> _tandaiSemuaDibaca() async {
     final auth = context.read<AuthProvider>();
     if (auth.token == null) return;
 
-    // Optimistic UI Update (Ubah tampilan dulu biar cepat)
     setState(() {
-      // Buat list baru dengan status isRead = 1
       _notifikasiList = _notifikasiList
           .map(
             (n) => NotificationModel(
@@ -91,14 +81,13 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
               body: n.body,
               type: n.type,
               dataId: n.dataId,
-              isRead: 1, // Paksa jadi 1
+              isRead: 1,
               createdAt: n.createdAt,
             ),
           )
           .toList();
     });
 
-    // Panggil API di background
     await _apiService.markAllNotificationsRead(auth.token!);
     widget.onRefreshBadge?.call();
 
@@ -107,12 +96,10 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
     }
   }
 
-  // [FUNGSI BARU] Hapus Semua Notifikasi
   Future<void> _hapusSemuaNotifikasi() async {
     final auth = context.read<AuthProvider>();
     if (auth.token == null) return;
 
-    // Tampilkan Dialog Konfirmasi Dulu
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -133,31 +120,26 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
 
     if (confirm != true) return;
 
-    // Proses Hapus
     setState(() => _isLoading = true);
     await _apiService.deleteAllNotifications(auth.token!);
 
-    // Refresh Data & Badge
     _fetchData();
-    widget.onRefreshBadge?.call(); // Update badge di menu utama jadi 0
+    widget.onRefreshBadge?.call();
 
     if (mounted) {
       _showToast('Semua notifikasi dihapus');
     }
   }
 
-  // Fungsi Aksi Saat Notif Diklik
   void _onTapNotification(NotificationModel notif) async {
     final auth = context.read<AuthProvider>();
 
     // 1. TANDAI DIBACA (API & UI)
     if (!notif.alreadyRead && auth.token != null) {
-      // Panggil API di background
-      _apiService.markNotificationRead(auth.token!, notif.id);
-      // Refresh badge di menu utama
+      // Mengirimkan tipe agar API Service tahu cara menanganinya
+      _apiService.markNotificationRead(auth.token!, notif.id, type: notif.type);
       widget.onRefreshBadge?.call();
 
-      // Update tampilan list secara lokal (biar cepat jadi putih)
       setState(() {
         int index = _notifikasiList.indexWhere((n) => n.id == notif.id);
         if (index != -1) {
@@ -168,7 +150,7 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
             type: notif.type,
             dataId: notif.dataId,
             createdAt: notif.createdAt,
-            isRead: 1, // Paksa jadi 1
+            isRead: 1,
           );
         }
       });
@@ -176,7 +158,6 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
 
     // 2. NAVIGASI SESUAI TIPE
     if (notif.dataId != null) {
-      // --- A. TIPE TRANSAKSI ---
       if (notif.type == 'transaksi') {
         Navigator.push(
           context,
@@ -184,27 +165,19 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
             builder: (context) => DetailOrderScreen(noTransaksi: notif.dataId!),
           ),
         );
-      }
-      // --- B. TIPE DUMAS ---
-      else if (notif.type == 'dumas') {
-        // Parsing ID ke integer
+      } else if (notif.type == 'dumas') {
         int? idLaporan = int.tryParse(notif.dataId.toString());
 
         if (idLaporan != null) {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => DetailLaporanScreen(
-                dumasId: idLaporan,
-                isMyReport: true, // Tandai sebagai laporan milik user
-              ),
+              builder: (context) =>
+                  DetailLaporanScreen(dumasId: idLaporan, isMyReport: true),
             ),
           );
         }
-      }
-      // --- C. TIPE RENBANG ---
-      else if (notif.type == 'renbang') {
-        // 1. Tampilkan Loading
+      } else if (notif.type == 'renbang') {
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -215,17 +188,14 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
           int? idUsulan = int.tryParse(notif.dataId.toString());
 
           if (idUsulan != null && auth.token != null) {
-            // 2. Ambil Data Lengkap dari API
             final usulanData = await _apiService.fetchRenbangDetailById(
               idUsulan,
               auth.token!,
             );
 
-            // 3. Tutup Loading
             if (mounted) Navigator.pop(context);
 
             if (usulanData != null) {
-              // 4. Buka Layar Detail
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -237,19 +207,23 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
               _showToast('Data usulan tidak ditemukan', isError: true);
             }
           } else {
-            if (mounted)
-              Navigator.pop(context); // Tutup loading jika ID/Token null
+            if (mounted) Navigator.pop(context);
           }
         } catch (e) {
-          if (mounted)
-            Navigator.pop(context); // Tutup loading jika error koneksi
+          if (mounted) Navigator.pop(context);
           _showToast('Gagal memuat data: $e', isError: true);
         }
+      }
+      // NAVIGASI KE TIKET PLESIR
+      else if (notif.type == 'plesir') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const TiketSayaScreen()),
+        );
       }
     }
   }
 
-  // Helper Toast dengan Style Biasa Anda (Hijau/Merah + Animasi)
   void _showToast(String message, {bool isError = false}) {
     if (!mounted) return;
     final theme = Theme.of(context);
@@ -257,11 +231,8 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
       message,
       context: context,
       position: StyledToastPosition.bottom,
-      // Warna Hijau Solid (Sukses) atau Merah (Error)
       backgroundColor: isError ? theme.colorScheme.error : Colors.green,
       textStyle: const TextStyle(color: Colors.white),
-
-      // Animasi Favorit
       animation: StyledToastAnimation.scale,
       reverseAnimation: StyledToastAnimation.fade,
       animDuration: const Duration(milliseconds: 150),
@@ -284,48 +255,34 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
         actions: [
           if (_notifikasiList.isNotEmpty)
             PopupMenuButton<String>(
-              // [FITUR 1] Offset agar menu muncul di BAWAH tombol, tidak menutupinya
               offset: const Offset(0, 50),
-
-              // Style agar sudutnya melengkung
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-
               onSelected: (value) {
                 if (value == 'tandai_semua') {
                   _tandaiSemuaDibaca();
                 } else if (value == 'hapus_semua') {
-                  _hapusSemuaNotifikasi(); // Panggil fungsi hapus
+                  _hapusSemuaNotifikasi();
                 }
               },
               itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                // --- MENU 1: BACA SEMUA ---
                 const PopupMenuItem<String>(
                   value: 'tandai_semua',
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.done_all,
-                        color: Colors.blue,
-                        size: 20,
-                      ), // Ada Ikon
+                      Icon(Icons.done_all, color: Colors.blue, size: 20),
                       SizedBox(width: 12),
                       Text('Tandai dibaca'),
                     ],
                   ),
                 ),
-                const PopupMenuDivider(), // Garis pemisah
-                // --- MENU 2: HAPUS SEMUA ---
+                const PopupMenuDivider(),
                 const PopupMenuItem<String>(
                   value: 'hapus_semua',
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.delete_outline,
-                        color: Colors.red,
-                        size: 20,
-                      ), // Ada Ikon
+                      Icon(Icons.delete_outline, color: Colors.red, size: 20),
                       SizedBox(width: 12),
                       Text('Hapus semua', style: TextStyle(color: Colors.red)),
                     ],
@@ -384,14 +341,12 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
   }
 }
 
-// Widget Card
 class _NotificationCard extends StatelessWidget {
   final NotificationModel notifikasi;
   final VoidCallback onTap;
 
   const _NotificationCard({required this.notifikasi, required this.onTap});
 
-  // Helper Simpel Waktu
   String _getTimeAgo(DateTime dateTime) {
     final diff = DateTime.now().difference(dateTime);
     if (diff.inDays > 7) {
@@ -407,7 +362,6 @@ class _NotificationCard extends StatelessWidget {
     }
   }
 
-  // Helper Icon berdasarkan Tipe
   Widget _buildIcon(ThemeData theme) {
     IconData iconData;
     Color color;
@@ -421,7 +375,11 @@ class _NotificationCard extends StatelessWidget {
         iconData = Icons.record_voice_over;
         color = Colors.blue;
         break;
-      default: // Info umum
+      case 'plesir': // IKON KHUSUS PLESIR
+        iconData = Icons.confirmation_number_rounded;
+        color = const Color(0xFF1E62DF);
+        break;
+      default:
         iconData = Icons.notifications;
         color = theme.colorScheme.primary;
     }
@@ -435,7 +393,6 @@ class _NotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Highlight jika belum dibaca
     final cardColor = notifikasi.alreadyRead
         ? theme.scaffoldBackgroundColor
         : theme.colorScheme.primary.withOpacity(0.05);
@@ -456,8 +413,7 @@ class _NotificationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      notifikasi
-                          .title, // Judul (Misal: Pembayaran Dikonfirmasi)
+                      notifikasi.title,
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: notifikasi.alreadyRead
@@ -467,7 +423,7 @@ class _NotificationCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      notifikasi.body, // Isi Pesan
+                      notifikasi.body,
                       style: theme.textTheme.bodyMedium,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
@@ -483,7 +439,6 @@ class _NotificationCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // Titik merah kecil jika belum dibaca
               if (!notifikasi.alreadyRead)
                 Container(
                   margin: const EdgeInsets.only(top: 4, left: 8),

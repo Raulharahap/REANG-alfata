@@ -94,19 +94,13 @@ class _ManageOrderScreenState extends State<ManageOrderScreen> {
     ).format(value);
   }
 
-  String _getFotoDestinasi(dynamic item, String tabKey) {
+  // 👇 PERBAIKAN: Tidak perlu lagi membedah item['transaksi']
+  String _getFotoDestinasi(dynamic item) {
     try {
-      // Tiket Aktif & Terpakai strukturnya dibungkus 'transaksi'
-      final target = (tabKey == 'aktif' || tabKey == 'terpakai')
-          ? item['transaksi']
-          : item;
-      if (target == null) return '';
-
-      if (target['kategori_tiket'] == 'wisata' && target['wisata'] != null) {
-        return target['wisata']['foto_utama'] ?? '';
-      } else if (target['kategori_tiket'] == 'event' &&
-          target['event'] != null) {
-        return target['event']['foto_utama'] ?? '';
+      if (item['kategori_tiket'] == 'wisata' && item['wisata'] != null) {
+        return item['wisata']['foto_utama'] ?? '';
+      } else if (item['kategori_tiket'] == 'event' && item['event'] != null) {
+        return item['event']['foto_utama'] ?? '';
       }
     } catch (e) {
       return '';
@@ -114,18 +108,13 @@ class _ManageOrderScreenState extends State<ManageOrderScreen> {
     return '';
   }
 
-  String _getNamaDestinasi(dynamic item, String tabKey) {
+  // 👇 PERBAIKAN: Tidak perlu lagi membedah item['transaksi']
+  String _getNamaDestinasi(dynamic item) {
     try {
-      final target = (tabKey == 'aktif' || tabKey == 'terpakai')
-          ? item['transaksi']
-          : item;
-      if (target == null) return 'Tiket Plesir';
-
-      if (target['kategori_tiket'] == 'wisata' && target['wisata'] != null) {
-        return target['wisata']['nama_wisata'] ?? 'Destinasi Wisata';
-      } else if (target['kategori_tiket'] == 'event' &&
-          target['event'] != null) {
-        return target['event']['nama_event'] ?? 'Event Acara';
+      if (item['kategori_tiket'] == 'wisata' && item['wisata'] != null) {
+        return item['wisata']['nama_wisata'] ?? 'Destinasi Wisata';
+      } else if (item['kategori_tiket'] == 'event' && item['event'] != null) {
+        return item['event']['nama_event'] ?? 'Event Acara';
       }
     } catch (e) {
       return 'Tiket Plesir';
@@ -141,8 +130,8 @@ class _ManageOrderScreenState extends State<ManageOrderScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // --- HEADER ---
-          Padding(
-            padding: const EdgeInsets.only(
+          const Padding(
+            padding: EdgeInsets.only(
               left: 20.0,
               right: 20.0,
               top: 24.0,
@@ -150,7 +139,7 @@ class _ManageOrderScreenState extends State<ManageOrderScreen> {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   'Pesanan Masuk',
                   style: TextStyle(
@@ -301,22 +290,21 @@ class _ManageOrderScreenState extends State<ManageOrderScreen> {
 
   // --- CARD PESANAN ADMIN ---
   Widget _buildCardPesananAdmin(dynamic item, String tabKey) {
-    final bool isTiketDigital = tabKey == 'aktif' || tabKey == 'terpakai';
-
-    // Ekstrak Data
-    final targetItem = isTiketDigital ? item['transaksi'] : item;
-    final user = targetItem != null ? targetItem['user'] : null;
+    // Ekstrak Data Langsung dari Item
+    final user = item['user'];
     final String namaPelanggan = user != null ? user['name'] : 'Pelanggan';
     final String tanggal = item['created_at'] != null
         ? item['created_at'].toString().substring(0, 16)
         : '-';
-    final String fotoUrl = _getFotoDestinasi(item, tabKey);
-    final String namaDestinasi = _getNamaDestinasi(item, tabKey);
 
-    // [PERBAIKAN ERROR 3] Deklarasi sebagai String? agar pengecekan null (??) berjalan normal
-    final String? kodeInvoiceAtauTiket = isTiketDigital
-        ? item['kode_tiket']
-        : targetItem['kode_invoice'];
+    final String fotoUrl = _getFotoDestinasi(item);
+    final String namaDestinasi = _getNamaDestinasi(item);
+
+    // Cek apakah tab ini berarti tiket sudah diterbitkan
+    final bool isLunas = tabKey == 'aktif' || tabKey == 'terpakai';
+    final String kodeInvoiceAtauTiket = isLunas
+        ? (item['kode_tiket'] ?? '-')
+        : (item['kode_invoice'] ?? '-');
 
     return Card(
       elevation: 1,
@@ -325,21 +313,18 @@ class _ManageOrderScreenState extends State<ManageOrderScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () {
-          // Hanya transaksi yang bisa diklik untuk verifikasi.
-          if (!isTiketDigital) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                // [PERBAIKAN ERROR 1 & 2] Sesuaikan dengan nama class yang benar
-                builder: (context) => DetailPesananAdminScreen(
-                  transaksi: targetItem,
-                  onActionSuccess: () {
-                    _fetchData(); // Trigger refresh jika ada perubahan status
-                  },
-                ),
+          // 👇 SEKARANG ADMIN BISA KLIK SEMUA STATUS UNTUK MELIHAT DETAIL!
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DetailPesananAdminScreen(
+                transaksi: item,
+                onActionSuccess: () {
+                  _fetchData(); // Trigger refresh jika admin mengubah status
+                },
               ),
-            );
-          }
+            ),
+          );
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -405,8 +390,7 @@ class _ManageOrderScreenState extends State<ManageOrderScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          kodeInvoiceAtauTiket ??
-                              '-', // Aman dari dead null aware error
+                          kodeInvoiceAtauTiket,
                           style: TextStyle(
                             color: Colors.grey.shade600,
                             fontWeight: FontWeight.w600,
@@ -425,9 +409,7 @@ class _ManageOrderScreenState extends State<ManageOrderScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          isTiketDigital
-                              ? '1 Tiket Digital'
-                              : '${targetItem['jumlah_tiket']} Tiket',
+                          '${item['jumlah_tiket']} Tiket',
                           style: TextStyle(
                             color: Colors.grey.shade600,
                             fontSize: 13,
@@ -453,7 +435,7 @@ class _ManageOrderScreenState extends State<ManageOrderScreen> {
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       Text(
-                        _formatCurrency(targetItem['total_harga'] ?? 0),
+                        _formatCurrency(item['total_harga'] ?? 0),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF0F4C81),
@@ -476,7 +458,8 @@ class _ManageOrderScreenState extends State<ManageOrderScreen> {
   Widget _buildAksiButton(String tabKey) {
     if (tabKey == 'menunggu_verifikasi') {
       return ElevatedButton.icon(
-        onPressed: null, // Dinonaktifkan karena diklik lewat Card (InkWell)
+        onPressed:
+            null, // Dinonaktifkan karena klik detail diarahkan lewat Card (InkWell)
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blue.shade600,
           foregroundColor: Colors.white,

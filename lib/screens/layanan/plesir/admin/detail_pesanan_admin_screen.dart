@@ -94,7 +94,7 @@ class _DetailPesananAdminScreenState extends State<DetailPesananAdminScreen> {
                 () => _apiService.konfirmasiPembayaranAdmin(
                   token: _token,
                   transaksiId: widget.transaksi['id'],
-                  aksi: 'terima',
+                  aksi: 'aktif', // 👇 PERBAIKAN: Ubah 'terima' menjadi 'aktif'
                 ),
                 'Pembayaran dikonfirmasi! Tiket diterbitkan.',
                 (isLoading) => setState(() => _isConfirming = isLoading),
@@ -151,7 +151,8 @@ class _DetailPesananAdminScreenState extends State<DetailPesananAdminScreen> {
                 () => _apiService.konfirmasiPembayaranAdmin(
                   token: _token,
                   transaksiId: widget.transaksi['id'],
-                  aksi: 'tolak',
+                  aksi:
+                      'ditolak', // 👇 PERBAIKAN: Ubah 'tolak' menjadi 'ditolak'
                   keteranganAdmin: alasanController.text.trim(),
                 ),
                 'Pembayaran berhasil ditolak.',
@@ -226,6 +227,10 @@ class _DetailPesananAdminScreenState extends State<DetailPesananAdminScreen> {
             const SizedBox(height: 16),
 
             _buildInfoPelangganCard(theme, transaksi),
+            const SizedBox(height: 16),
+
+            // --- KARTU BARU: INFORMASI PEMBAYARAN ---
+            _buildInfoPembayaranCard(theme, transaksi),
             const SizedBox(height: 16),
 
             _buildCostCard(theme, transaksi),
@@ -449,6 +454,69 @@ class _DetailPesananAdminScreenState extends State<DetailPesananAdminScreen> {
               label: 'Email',
               value: user['email'] ?? '-',
             ),
+            if (user['phone'] != null) ...[
+              const SizedBox(height: 8),
+              _InfoRow(
+                theme: theme,
+                icon: Icons.phone_outlined,
+                label: 'No. HP',
+                value: user['phone'],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- WIDGET BARU: KARTU INFO PEMBAYARAN ---
+  Widget _buildInfoPembayaranCard(ThemeData theme, dynamic transaksi) {
+    // Tangkap data dari relasi backend
+    final metode = transaksi['metode_pembayaran'] ?? {};
+    final jenisMetode =
+        metode['jenis_metode'] ?? transaksi['jenis_metode'] ?? '-';
+    final namaMetode = metode['nama_metode'] ?? '-';
+    final nomorRekening = metode['nomor_rekening'] ?? '-';
+    final namaPenerima = metode['nama_penerima'] ?? '-';
+
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Detail Pembayaran Pelanggan',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Divider(height: 24),
+            _InfoRow(
+              theme: theme,
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Metode',
+              value: '$jenisMetode - $namaMetode',
+            ),
+            // Sembunyikan rekening jika metodenya COD atau kosong
+            if (nomorRekening != '-' && nomorRekening.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _InfoRow(
+                theme: theme,
+                icon: Icons.numbers_outlined,
+                label: 'No. Tujuan/Rek',
+                value: nomorRekening,
+              ),
+              const SizedBox(height: 8),
+              _InfoRow(
+                theme: theme,
+                icon: Icons.badge_outlined,
+                label: 'Atas Nama',
+                value: namaPenerima,
+              ),
+            ],
           ],
         ),
       ),
@@ -563,7 +631,7 @@ class _DetailPesananAdminScreenState extends State<DetailPesananAdminScreen> {
             const Divider(height: 24),
             _InfoRow(
               theme: theme,
-              label: 'Harga Tiket',
+              label: 'Harga Tiket Satuan',
               value: _formatCurrency(
                 (transaksi['total_harga'] ?? 0) ~/
                     (transaksi['jumlah_tiket'] ?? 1),

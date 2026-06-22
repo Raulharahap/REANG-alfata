@@ -20,18 +20,15 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
   final ImagePicker _picker = ImagePicker();
   final ApiService _apiService = ApiService();
 
-  // Controller untuk mengambil data dari Form Input
   final TextEditingController _namaMetodeController = TextEditingController();
   final TextEditingController _namaPenerimaController = TextEditingController();
   final TextEditingController _nomorRekeningController =
       TextEditingController();
 
-  // State untuk menyimpan gambar QRIS & Status Loading
   File? _qrisImageFile;
   String? _existingQrisUrl;
-  bool _isLoading = false; // Tambahan state loading
+  bool _isLoading = false;
 
-  // Variabel untuk menyimpan pilihan tipe metode pembayaran
   String _jenisMetode = 'Transfer Bank';
   bool _isEditMode = false;
 
@@ -40,16 +37,21 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
     super.initState();
     if (widget.metodeExisting != null) {
       _isEditMode = true;
-      _namaMetodeController.text = widget.metodeExisting!['nama_metode'] ?? '';
-      _jenisMetode = widget.metodeExisting!['jenis_metode'] ?? 'Transfer Bank';
+      _namaMetodeController.text =
+          widget.metodeExisting!['nama_metode']?.toString() ?? '';
+      _jenisMetode =
+          widget.metodeExisting!['jenis_metode']?.toString() ?? 'Transfer Bank';
       _namaPenerimaController.text =
-          widget.metodeExisting!['nama_penerima'] ?? '';
+          widget.metodeExisting!['nama_penerima']?.toString() ?? '';
       _nomorRekeningController.text =
-          widget.metodeExisting!['nomor_rekening'] ?? '';
+          widget.metodeExisting!['nomor_rekening']?.toString() ?? '';
 
-      // Gunakan foto_qris_url dari API Laravel agar link gambar lengkap
+      // 👇 Ambil URL murni dari API Laravel yang sudah diproses oleh Accessor Model
       if (_jenisMetode == 'QRIS') {
-        _existingQrisUrl = widget.metodeExisting!['foto_qris_url'];
+        _existingQrisUrl =
+            (widget.metodeExisting!['foto_qris'] ??
+                    widget.metodeExisting!['foto_qris_url'])
+                ?.toString();
       }
     }
   }
@@ -74,13 +76,11 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
     );
   }
 
-  // --- FUNGSI MENGAMBIL FOTO DARI GALERI ---
   Future<void> _pickQrisImage() async {
     try {
       final pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality:
-            85, // Kompresi gambar agar tidak terlalu besar di database
+        imageQuality: 85,
       );
       if (pickedFile != null) {
         setState(() {
@@ -92,11 +92,9 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
     }
   }
 
-  // --- FUNGSI EKSEKUSI API ---
   Future<void> _simpanData() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validasi tambahan khusus tipe QRIS wajib upload gambar baru/lama
     if (_jenisMetode == 'QRIS' &&
         _qrisImageFile == null &&
         _existingQrisUrl == null) {
@@ -113,7 +111,6 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
       final token = context.read<AuthProvider>().token;
       if (token == null) throw Exception('Sesi berakhir, silakan login ulang.');
 
-      // Susun data Map hasil input form
       final Map<String, dynamic> resultData = {
         'nama_metode': _namaMetodeController.text.trim(),
         'jenis_metode': _jenisMetode,
@@ -123,7 +120,6 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
         'nomor_rekening': _jenisMetode == 'Transfer Bank'
             ? _nomorRekeningController.text.trim()
             : '-',
-        // Jika jenisnya QRIS, kirim objek File untuk di-upload oleh Dio
         'file_qris': _jenisMetode == 'QRIS' ? _qrisImageFile : null,
       };
 
@@ -142,7 +138,6 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
         _showToast('Metode pembayaran berhasil ditambahkan.');
       }
 
-      // Kembali ke halaman sebelumnya dengan membawa nilai 'true' (tanda sukses)
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       _showToast(e.toString().replaceAll("Exception: ", ""), isError: true);
@@ -181,7 +176,6 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Input Nama Metode
               TextFormField(
                 controller: _namaMetodeController,
                 style: const TextStyle(
@@ -214,7 +208,6 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
               ),
               const SizedBox(height: 24),
 
-              // 2. Judul Jenis Metode
               const Text(
                 'Jenis Kategori Metode',
                 style: TextStyle(
@@ -225,7 +218,6 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
               ),
               const SizedBox(height: 8),
 
-              // 3. Radio Buttons Opsi Metode Pembayaran
               Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
@@ -273,34 +265,11 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
                         setState(() => _jenisMetode = value!);
                       },
                     ),
-                    const Divider(height: 1, indent: 16, endIndent: 16),
-                    RadioListTile<String>(
-                      title: const Text(
-                        'COD (Bayar di Tempat)',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      subtitle: const Text(
-                        'User membayar cash langsung saat tiba di lokasi',
-                        style: TextStyle(fontSize: 11),
-                      ),
-                      value: 'COD',
-                      groupValue: _jenisMetode,
-                      activeColor: primaryBlue,
-                      onChanged: (value) {
-                        setState(() => _jenisMetode = value!);
-                      },
-                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
 
-              // =================================================================
-              // CONDITIONAL UI TIPE 1: TAMPIL JIKA PILIH TRANSFER BANK
-              // =================================================================
               if (_jenisMetode == 'Transfer Bank') ...[
                 TextFormField(
                   controller: _namaPenerimaController,
@@ -374,9 +343,6 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
                 const SizedBox(height: 40),
               ],
 
-              // =================================================================
-              // CONDITIONAL UI TIPE 2: TAMPIL JIKA PILIH QRIS (UPLOAD GAMBAR)
-              // =================================================================
               if (_jenisMetode == 'QRIS') ...[
                 const Text(
                   'Upload Kode QRIS Toko/Mitra',
@@ -400,7 +366,6 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
                             ? primaryBlue
                             : Colors.grey.shade300,
                         width: 2,
-                        style: BorderStyle.solid,
                       ),
                     ),
                     child: _qrisImageFile != null
@@ -420,7 +385,7 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
                               fit: BoxFit.contain,
                               headers: const {
                                 'ngrok-skip-browser-warning': 'true',
-                              },
+                              }, // Pengaman Ngrok
                             ),
                           )
                         : Column(
@@ -462,7 +427,6 @@ class _HalamanTambahMetodeState extends State<HalamanTambahMetode> {
                 const SizedBox(height: 40),
               ],
 
-              // 6. Tombol Aksi Simpan Data
               ElevatedButton.icon(
                 onPressed: _isLoading ? null : _simpanData,
                 icon: _isLoading

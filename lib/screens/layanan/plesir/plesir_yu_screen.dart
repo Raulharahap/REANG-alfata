@@ -1,13 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // <-- Ditambahkan untuk berinteraksi dengan AuthProvider
-import 'package:reang_app/providers/auth_provider.dart'; // <-- Ditambahkan untuk cek token login
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart'; // 👇 IMPORT UNTUK FORMATTING TANGGAL/WAKTU
+import 'package:reang_app/providers/auth_provider.dart';
 import 'package:reang_app/models/plesir_model.dart';
 import 'package:reang_app/services/api_service.dart';
 import 'package:reang_app/screens/layanan/plesir/detail_plesir_screen.dart';
 import 'package:reang_app/screens/layanan/plesir/pesan_tiket_screen.dart';
 import 'package:reang_app/screens/layanan/plesir/info_wisata_screen.dart';
 import 'package:reang_app/screens/layanan/plesir/form_mitra_plesir_screen.dart';
-import 'package:reang_app/screens/layanan/plesir/admin/home_admin_plesir_screen.dart'; // <-- Ditambahkan untuk bypass langsung ke Home Admin
+import 'package:reang_app/screens/layanan/plesir/admin/home_admin_plesir_screen.dart';
 import 'package:reang_app/screens/layanan/plesir/tiket_saya_screen.dart';
 import 'package:reang_app/screens/auth/login_screen.dart';
 
@@ -18,6 +20,9 @@ class _CachedPlesirData {
   bool isInitiated = false;
 }
 
+final RouteObserver<ModalRoute<void>> plesirRouteObserver =
+    RouteObserver<ModalRoute<void>>();
+
 class PlesirYuScreen extends StatefulWidget {
   const PlesirYuScreen({super.key});
 
@@ -25,7 +30,8 @@ class PlesirYuScreen extends StatefulWidget {
   State<PlesirYuScreen> createState() => _PlesirYuScreenState();
 }
 
-class _PlesirYuScreenState extends State<PlesirYuScreen> {
+class _PlesirYuScreenState extends State<PlesirYuScreen>
+    with WidgetsBindingObserver, RouteAware {
   final ApiService _apiService = ApiService();
   final ScrollController _scrollController = ScrollController();
   final Map<String, _CachedPlesirData> _cache = {};
@@ -34,6 +40,10 @@ class _PlesirYuScreenState extends State<PlesirYuScreen> {
   List<String> _dynamicFitur = ['Semua'];
   int _selectedFiturIndex = 0;
   int _selectedTabIndex = 0;
+
+  int _userUnpaidCount = 0;
+  int _adminPendingCount = 0;
+  late AuthProvider _authProvider;
 
   final List<PlesirModel> _dummyItems = [
     PlesirModel(
@@ -54,49 +64,132 @@ class _PlesirYuScreenState extends State<PlesirYuScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _authProvider = context.read<AuthProvider>();
+    _authProvider.addListener(_fetchNotificationCounts);
     _initializeData();
     _scrollController.addListener(_onScroll);
+    _fetchNotificationCounts();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      plesirRouteObserver.subscribe(this, route);
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _authProvider.removeListener(_fetchNotificationCounts);
+    plesirRouteObserver.unsubscribe(this);
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
 
-  // --- LOGIKA GERBANG PENGECEKAN STATUS MITRA ---
-  // --- LOGIKA GERBANG PENGECEKAN STATUS MITRA (DIPERBARUI) ---
-  void _aksesMenuMitra() {
-    // Membaca status auth saat ini
-    final authProvider = context.read<AuthProvider>();
+  @override
+  void didPopNext() {
+    super.didPopNext();
+    _fetchNotificationCounts();
+  }
 
-    // 1. Cek apakah sudah login aplikasi utama
-    if (!authProvider.isLoggedIn) {
-      // Jika belum login, arahkan ke halaman Login
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
-      return; // Hentikan eksekusi di sini
-    }
-
-    // 2. CEK STATUS KEMITRAAN LANGSUNG DARI PROVIDER
-    if (authProvider.isAdminPlesir) {
-      // JIKA SUDAH PUNYA ROLE MITRA PLESIR: Langsung ke Dashboard Admin
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeAdminPlesirScreen()),
-      );
-    } else {
-      // JIKA BELUM PUNYA ROLE: Arahkan ke Form Pendaftaran
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const FormMitraPlesirScreen()),
-      );
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _fetchNotificationCounts();
     }
   }
 
-  // --- MODIFIKASI FUNGSI MENU PINTAS ---
+  Future<void> _fetchNotificationCounts() async {
+    final auth = context.read<AuthProvider>();
+
+    if (!auth.isLoggedIn || auth.token == null) {
+      if (mounted) {
+        setState(() {
+          _userUnpaidCount = 0;
+          _adminPendingCount = 0;
+        });
+      }
+      return;
+    }
+
+    try {
+      final userTiket = await _apiService.getSemuaTiketSaya(auth.token!);
+      final int countPending = (userTiket['pending'] as List?)?.length ?? 0;
+      final int countVerifikasi =
+          (userTiket['menunggu_verifikasi'] as List?)?.length ?? 0;
+      final int countAktif = (userTiket['aktif'] as List?)?.length ?? 0;
+      final int countDitolak = (userTiket['ditolak'] as List?)?.length ?? 0;
+
+      final int totalUserNotif =
+          countPending + countVerifikasi + countAktif + countDitolak;
+
+      int adminNotif = 0;
+      try {
+        final adminTiket = await _apiService.getAdminPesananMasuk(auth.token!);
+        adminNotif = (adminTiket['menunggu_verifikasi'] as List?)?.length ?? 0;
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _userUnpaidCount = totalUserNotif;
+          _adminPendingCount = adminNotif;
+        });
+      }
+    } catch (e) {
+      debugPrint("Gagal mengambil notifikasi Plesir: $e");
+    }
+  }
+
+  void _aksesMenuMitra() {
+    final authProvider = context.read<AuthProvider>();
+
+    if (!authProvider.isLoggedIn) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const LoginScreen(popOnSuccess: true),
+        ),
+      ).then((_) => _fetchNotificationCounts());
+      return;
+    }
+
+    if (authProvider.isAdminPlesir) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeAdminPlesirScreen()),
+      ).then((_) => _fetchNotificationCounts());
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const FormMitraPlesirScreen()),
+      ).then((_) => _fetchNotificationCounts());
+    }
+  }
+
+  void _aksesTiketSaya() {
+    final authProvider = context.read<AuthProvider>();
+
+    if (!authProvider.isLoggedIn) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const LoginScreen(popOnSuccess: true),
+        ),
+      ).then((_) => _fetchNotificationCounts());
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const TiketSayaScreen()),
+    ).then((_) => _fetchNotificationCounts());
+  }
+
   void _showShortcutMenu() {
     showModalBottomSheet(
       context: context,
@@ -127,28 +220,29 @@ class _PlesirYuScreenState extends State<PlesirYuScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildShortcutCard(
-                  icon: Icons.confirmation_number_outlined,
-                  label: "Tiket Saya",
-                  color: Colors.blue,
-                  onTap: () {
-                    Navigator.pop(context); // Tutup bottom sheet
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const TiketSayaScreen(),
-                      ),
-                    );
-                  },
+                _buildNotificationBadge(
+                  _userUnpaidCount,
+                  _buildShortcutCard(
+                    icon: Icons.confirmation_number_outlined,
+                    label: "Tiket Saya",
+                    color: Colors.blue,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _aksesTiketSaya();
+                    },
+                  ),
                 ),
-                _buildShortcutCard(
-                  icon: Icons.storefront_outlined,
-                  label: "Mitra Wisata/Event",
-                  color: Colors.orange,
-                  onTap: () {
-                    Navigator.pop(context); // Tutup bottom sheet
-                    _aksesMenuMitra(); // Menggunakan fungsi gerbang pengecekan
-                  },
+                _buildNotificationBadge(
+                  _adminPendingCount,
+                  _buildShortcutCard(
+                    icon: Icons.storefront_outlined,
+                    label: "Mitra Wisata",
+                    color: Colors.orange,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _aksesMenuMitra();
+                    },
+                  ),
                 ),
               ],
             ),
@@ -184,6 +278,49 @@ class _PlesirYuScreenState extends State<PlesirYuScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildNotificationBadge(
+    int count,
+    Widget child, {
+    bool isDense = false,
+  }) {
+    if (count == 0) return child;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        Positioned(
+          top: isDense ? -4 : 0,
+          right: isDense ? -4 : 0,
+          child: Container(
+            padding: EdgeInsets.all(isDense ? 4 : 6),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                width: 2,
+              ),
+            ),
+            constraints: BoxConstraints(
+              minWidth: isDense ? 18 : 22,
+              minHeight: isDense ? 18 : 22,
+            ),
+            child: Center(
+              child: Text(
+                count > 99 ? '99+' : count.toString(),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isDense ? 10 : 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -257,6 +394,7 @@ class _PlesirYuScreenState extends State<PlesirYuScreen> {
       _dynamicFitur = ['Semua'];
       _selectedFiturIndex = 0;
       _initializeData();
+      _fetchNotificationCounts();
     });
   }
 
@@ -295,24 +433,30 @@ class _PlesirYuScreenState extends State<PlesirYuScreen> {
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 20),
-            child: GestureDetector(
-              onTap: () => _showShortcutMenu(),
-              child: Container(
-                width: 45,
-                height: 45,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F3F4),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey.withOpacity(0.2)),
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.dashboard_customize_outlined,
-                    color: Color(0xFF1E62DF),
-                    size: 24,
+            padding: const EdgeInsets.only(right: 20, top: 4, bottom: 4),
+            child: Center(
+              child: _buildNotificationBadge(
+                _userUnpaidCount + _adminPendingCount,
+                GestureDetector(
+                  onTap: () => _showShortcutMenu(),
+                  child: Container(
+                    width: 45,
+                    height: 45,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F3F4),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.dashboard_customize_outlined,
+                        color: Color(0xFF1E62DF),
+                        size: 24,
+                      ),
+                    ),
                   ),
                 ),
+                isDense: true,
               ),
             ),
           ),
@@ -372,84 +516,14 @@ class _PlesirYuScreenState extends State<PlesirYuScreen> {
     return const PesanTiketScreen();
   }
 
+  // =========================================================================
+  // 👇 MODIFIKASI TERPADU: KATEGORI & CHIPS IKUT TER-SCROLL DI SINI
+  // =========================================================================
   Widget _buildPariwisataBody() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: TextField(
-            decoration: InputDecoration(
-              hintText: 'Cari lokasi wisata...',
-              prefixIcon: const Icon(Icons.search, color: Colors.grey),
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
-        ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Text(
-            'Kategori Populer',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-              color: Colors.black,
-            ),
-          ),
-        ),
-        SizedBox(
-          height: 50,
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            scrollDirection: Axis.horizontal,
-            itemCount: _dynamicFitur.length,
-            itemBuilder: (context, index) {
-              bool selected = _selectedFiturIndex == index;
-              return Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: FilterChip(
-                  showCheckmark: selected,
-                  label: Text(
-                    _dynamicFitur[index],
-                    style: TextStyle(
-                      color: selected ? Colors.white : Colors.black,
-                      fontWeight: selected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                    ),
-                  ),
-                  selected: selected,
-                  onSelected: (val) {
-                    setState(() => _selectedFiturIndex = index);
-                    _loadInitialDataForFitur(_dynamicFitur[index]);
-                  },
-                  selectedColor: const Color(0xFF1E62DF),
-                  backgroundColor: Colors.white,
-                  checkmarkColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide.none,
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 20),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () async => _reloadData(),
-            color: const Color(0xFF1E62DF),
-            child: _buildList(),
-          ),
-        ),
-      ],
+    return RefreshIndicator(
+      onRefresh: () async => _reloadData(),
+      color: const Color(0xFF1E62DF),
+      child: _buildList(),
     );
   }
 
@@ -467,12 +541,95 @@ class _PlesirYuScreenState extends State<PlesirYuScreen> {
         ? _dummyItems
         : currentCache.items;
 
+    // Index 0 dialokasikan penuh untuk header komponen agar ikut ter-scroll
+    int headerCount = 1;
+    int loadingCount = currentCache.hasMore ? 1 : 0;
+
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: displayItems.length + (currentCache.hasMore ? 1 : 0),
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      itemCount: headerCount + displayItems.length + loadingCount,
       itemBuilder: (context, index) {
-        if (index == displayItems.length) {
+        if (index == 0) {
+          // --- HEADER KOMPONEN YANG IKUT TER-SCROLL ---
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Cari lokasi wisata...',
+                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Kategori Populer',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: 50,
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _dynamicFitur.length,
+                  itemBuilder: (context, index) {
+                    bool selected = _selectedFiturIndex == index;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: FilterChip(
+                        showCheckmark: selected,
+                        label: Text(
+                          _dynamicFitur[index],
+                          style: TextStyle(
+                            color: selected ? Colors.white : Colors.black,
+                            fontWeight: selected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                        selected: selected,
+                        onSelected: (val) {
+                          setState(() => _selectedFiturIndex = index);
+                          _loadInitialDataForFitur(_dynamicFitur[index]);
+                        },
+                        selectedColor: const Color(0xFF1E62DF),
+                        backgroundColor: Colors.white,
+                        checkmarkColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide.none,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          );
+        }
+
+        // Penyesuaian indeks data riil setelah dipotong baris header
+        int itemIndex = index - headerCount;
+
+        if (itemIndex == displayItems.length) {
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(
@@ -480,18 +637,34 @@ class _PlesirYuScreenState extends State<PlesirYuScreen> {
             ),
           );
         }
-        return DestinationCard(data: displayItems[index]);
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: DestinationCard(data: displayItems[itemIndex]),
+        );
       },
     );
   }
 }
 
+// =========================================================================
+// 👇 SEKTOR PEMBENAHAN KARTU: BEBAS OVERFLOW, HTML STRIPPER, & IMAGE ALT
+// =========================================================================
 class DestinationCard extends StatelessWidget {
   final PlesirModel data;
   const DestinationCard({super.key, required this.data});
 
+  // Pembersih tag HTML bawaan database (<p>, <strong>, dll)
+  String _removeAllHtmlTags(String htmlText) {
+    RegExp exp = RegExp(r"<[^>]*>", multiLine: true, caseSensitive: true);
+    return htmlText.replaceAll(exp, '').trim();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final cleanJudul = _removeAllHtmlTags(data.judul);
+    final cleanAlamat = _removeAllHtmlTags(data.alamat);
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -526,11 +699,39 @@ class DestinationCard extends StatelessWidget {
                 height: 200,
                 width: double.infinity,
                 fit: BoxFit.cover,
+                headers: const {
+                  'ngrok-skip-browser-warning': 'true',
+                }, // Penjinak Ngrok Error 403
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    height: 200,
+                    width: double.infinity,
+                    color: Colors.grey[100],
+                    child: const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                },
+                // 👇 WIDGET ALT JIKA GAMBAR ERROR ATAU KOSONG
                 errorBuilder: (context, error, stackTrace) => Container(
                   height: 200,
+                  width: double.infinity,
                   color: Colors.grey[200],
-                  child: const Center(
-                    child: Icon(Icons.broken_image, color: Colors.grey),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.image_not_supported_outlined,
+                        size: 44,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        "Gambar tidak tersedia",
+                        style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -542,17 +743,24 @@ class DestinationCard extends StatelessWidget {
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // 👇 EXPANDED: Mengunci judul agar turun baris saat kepanjangan
                       Expanded(
                         child: Text(
-                          data.judul,
+                          cleanJudul,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 20,
+                            fontSize: 18,
+                            color: Colors.black87,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 12),
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(Icons.star, color: Colors.amber, size: 20),
                           const SizedBox(width: 4),
@@ -560,7 +768,7 @@ class DestinationCard extends StatelessWidget {
                             data.rating.toString(),
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                              fontSize: 15,
                             ),
                           ),
                         ],
@@ -569,18 +777,27 @@ class DestinationCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
-                        Icons.location_on,
-                        size: 18,
-                        color: Colors.grey,
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2.0),
+                        child: Icon(
+                          Icons.location_on,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
                       ),
                       const SizedBox(width: 4),
-                      Text(
-                        data.alamat,
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 14,
+                      // 👇 EXPANDED: Penahan luapan agar teks alamat super panjang tidak memicu overflow
+                      Expanded(
+                        child: Text(
+                          cleanAlamat,
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],

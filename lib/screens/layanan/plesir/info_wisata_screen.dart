@@ -6,6 +6,13 @@ class InfoWisataScreen extends StatelessWidget {
   final List<PlesirModel> items;
   const InfoWisataScreen({super.key, required this.items});
 
+  // Fungsi helper untuk menghilangkan tag HTML (seperti <p>, <br>, <strong>, dll)
+  String _removeAllHtmlTags(String htmlText) {
+    RegExp exp = RegExp(r"<[^>]*>", multiLine: true, caseSensitive: true);
+    // Hapus tag HTML dan bersihkan spasi yang berlebihan
+    return htmlText.replaceAll(exp, '').trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
@@ -17,6 +24,9 @@ class InfoWisataScreen extends StatelessWidget {
       itemCount: items.length,
       itemBuilder: (context, index) {
         final data = items[index];
+        // Bersihkan deskripsi dari tag HTML
+        final String cleanDeskripsi = _removeAllHtmlTags(data.deskripsi);
+
         return GestureDetector(
           onTap: () {
             Navigator.push(
@@ -51,6 +61,40 @@ class InfoWisataScreen extends StatelessWidget {
                     height: 180,
                     width: double.infinity,
                     fit: BoxFit.cover,
+                    headers: const {
+                      'ngrok-skip-browser-warning': 'true',
+                    }, // Bypass ngrok
+                    // Placeholder saat gambar dimuat
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        height: 180,
+                        width: double.infinity,
+                        color: Colors.grey[200],
+                        child: const Center(child: CircularProgressIndicator()),
+                      );
+                    },
+                    // Gambar pengganti (Alt) jika URL error/kosong
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: 180,
+                      width: double.infinity,
+                      color: Colors.grey[300],
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.image_not_supported,
+                            size: 50,
+                            color: Colors.grey[500],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Gambar tidak tersedia",
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 Padding(
@@ -60,21 +104,32 @@ class InfoWisataScreen extends StatelessWidget {
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            data.judul,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                          // Gunakan Expanded agar judul panjang tidak overflow ke samping
+                          Expanded(
+                            child: Text(
+                              data.judul,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          const SizedBox(
+                            width: 8,
+                          ), // Jarak antara judul dan rating
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               const Icon(
                                 Icons.star,
                                 color: Colors.orange,
                                 size: 16,
                               ),
+                              const SizedBox(width: 4),
                               Text(
                                 data.rating.toString(),
                                 style: const TextStyle(
@@ -85,33 +140,43 @@ class InfoWisataScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            Icons.location_on,
-                            size: 14,
-                            color: Colors.grey,
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2.0),
+                            child: Icon(
+                              Icons.location_on,
+                              size: 14,
+                              color: Colors.grey,
+                            ),
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            data.alamat,
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
+                          // Gunakan Expanded agar alamat panjang turun ke bawah otomatis
+                          Expanded(
+                            child: Text(
+                              data.alamat,
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        data.deskripsi,
+                        cleanDeskripsi, // Gunakan variabel yang sudah dibersihkan
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.black87,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2, // Batasi 2 baris agar rapi
+                        overflow: TextOverflow
+                            .ellipsis, // Tambah ... jika terlalu panjang
                       ),
                     ],
                   ),

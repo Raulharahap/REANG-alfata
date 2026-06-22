@@ -53,12 +53,11 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
   }
 
   String _formatRupiah(int number) {
-    final formatCurrency = NumberFormat.currency(
+    return NumberFormat.currency(
       locale: 'id_ID',
       symbol: 'Rp ',
       decimalDigits: 0,
-    );
-    return formatCurrency.format(number);
+    ).format(number);
   }
 
   // --- HELPER MENGAMBIL NAMA DESTINASI ---
@@ -76,17 +75,12 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
   }
 
   // --- HELPER MENGAMBIL FOTO UTAMA DESTINASI ---
-  String _getFotoDestinasi(dynamic item, {bool isTiketDigital = false}) {
+  String _getFotoDestinasi(dynamic item) {
     try {
-      // Jika tab tiket digital, datanya ada di dalam objek 'transaksi'
-      final target = isTiketDigital ? item['transaksi'] : item;
-      if (target == null) return '';
-
-      if (target['kategori_tiket'] == 'wisata' && target['wisata'] != null) {
-        return target['wisata']['foto_utama'] ?? '';
-      } else if (target['kategori_tiket'] == 'event' &&
-          target['event'] != null) {
-        return target['event']['foto_utama'] ?? '';
+      if (item['kategori_tiket'] == 'wisata' && item['wisata'] != null) {
+        return item['wisata']['foto_utama'] ?? '';
+      } else if (item['kategori_tiket'] == 'event' && item['event'] != null) {
+        return item['event']['foto_utama'] ?? '';
       }
     } catch (e) {
       return '';
@@ -96,68 +90,78 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 5,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black87),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: const Text(
-            'Tiket Saya',
-            style: TextStyle(
-              color: Colors.black87,
-              fontWeight: FontWeight.w600,
-              fontSize: 20,
+    return PopScope(
+      canPop: false, // Mencegah back default melompat ke home
+      onPopInvoked: (didPop) {
+        if (!didPop) {
+          Navigator.pop(
+            context,
+          ); // Menjamin hanya mundur 1 halaman ke PlesirYuScreen
+        }
+      },
+      child: DefaultTabController(
+        length: 5,
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0.5,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.black87),
+              onPressed: () =>
+                  Navigator.pop(context), // Mundur ke PlesirYuScreen
             ),
-          ),
-          bottom: TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            labelColor: const Color(0xFF0F4C81),
-            unselectedLabelColor: Colors.black45,
-            indicatorColor: const Color(0xFF0F4C81),
-            indicatorWeight: 3,
-            labelStyle: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-            unselectedLabelStyle: const TextStyle(
-              fontWeight: FontWeight.normal,
-              fontSize: 14,
-            ),
-            // Menggunakan widget Tab() dengan custom child agar bisa dipasang Badge
-            tabs: [
-              _buildTabItem('Belum Bayar', _pending.length),
-              _buildTabItem('Menunggu Verifikasi', _menungguVerifikasi.length),
-              _buildTabItem('Ditolak', _ditolak.length, isError: true),
-              _buildTabItem('Tiket Aktif', _aktif.length, isSuccess: true),
-              _buildTabItem('Selesai', _terpakai.length),
-            ],
-          ),
-        ),
-        body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFF0F4C81)),
-              )
-            : TabBarView(
-                children: [
-                  _buildListTransaksi(_pending, 'pending'),
-                  _buildListTransaksi(_menungguVerifikasi, 'verifikasi'),
-                  _buildListTransaksi(_ditolak, 'ditolak'),
-                  _buildListTiketDigital(_aktif, 'aktif'),
-                  _buildListTiketDigital(_terpakai, 'terpakai'),
-                ],
+            title: const Text(
+              'Tiket Saya',
+              style: TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+                fontSize: 18,
               ),
+            ),
+            centerTitle: true,
+            bottom: TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelColor: const Color(0xFF0F4C81),
+              unselectedLabelColor: Colors.black45,
+              indicatorColor: const Color(0xFF0F4C81),
+              indicatorWeight: 3,
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.normal,
+                fontSize: 13,
+              ),
+              tabs: [
+                _buildTabItem('Belum Bayar', _pending.length),
+                _buildTabItem('Verifikasi', _menungguVerifikasi.length),
+                _buildTabItem('Ditolak', _ditolak.length, isError: true),
+                _buildTabItem('Tiket Aktif', _aktif.length, isSuccess: true),
+                _buildTabItem('Selesai', _terpakai.length),
+              ],
+            ),
+          ),
+          body: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF0F4C81)),
+                )
+              : TabBarView(
+                  children: [
+                    _buildListTransaksi(_pending, 'pending'),
+                    _buildListTransaksi(_menungguVerifikasi, 'verifikasi'),
+                    _buildListTransaksi(_ditolak, 'ditolak'),
+                    _buildListTiketDigital(_aktif, 'aktif'),
+                    _buildListTiketDigital(_terpakai, 'terpakai'),
+                  ],
+                ),
+        ),
       ),
     );
   }
 
-  // --- WIDGET TAB DENGAN BADGE NOTIFIKASI ---
   Tab _buildTabItem(
     String title,
     int count, {
@@ -179,12 +183,9 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
           ),
         ),
         backgroundColor: badgeColor,
-        offset: const Offset(
-          12,
-          -4,
-        ), // Mengatur posisi badge agak ke kanan atas
+        offset: const Offset(14, -4),
         child: Padding(
-          padding: const EdgeInsets.only(right: 8.0), // Jarak teks dengan badge
+          padding: const EdgeInsets.only(right: 6.0),
           child: Text(title),
         ),
       ),
@@ -192,7 +193,7 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
   }
 
   // ===========================================================================
-  // WIDGET LIST UNTUK TAB 1, 2, 3 (TRANSAKSI / PEMBAYARAN)
+  // WIDGET LIST UNTUK TAB 1, 2, 3 (TRANSAKSI / PEMBAYARAN PENDING)
   // ===========================================================================
   Widget _buildListTransaksi(List<dynamic> items, String tabType) {
     if (items.isEmpty) return _buildEmptyState();
@@ -206,9 +207,17 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
         itemBuilder: (context, index) {
           final item = items[index];
           final String namaDestinasi = _getNamaDestinasi(item);
-          final String fotoUrl = _getFotoDestinasi(item, isTiketDigital: false);
+          final String fotoUrl = _getFotoDestinasi(item);
           final bool isDitolak = tabType == 'ditolak';
           final bool isPending = tabType == 'pending';
+
+          // Ambal data tambahan varian & kunjungan
+          final String namaKelas = item['varian'] != null
+              ? item['varian']['nama_kelas'] ?? ''
+              : '';
+          final String tglKunjungan = item['tanggal_kunjungan'] != null
+              ? item['tanggal_kunjungan'].toString()
+              : '-';
 
           return GestureDetector(
             onTap: () {
@@ -217,32 +226,24 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                 MaterialPageRoute(
                   builder: (context) => DetailTiketPesananScreen(
                     data: item,
-                    isTiketDigital: false, // Karena ini List Transaksi
-                    tabType: tabType,
+                    tabType: tabType, // isTiketDigital telah dihapus
                   ),
                 ),
-              ).then((_) => _fetchData()); // Refresh kalau kembali dari detail
+              ).then((_) => _fetchData());
             },
-            child: Container(
+            child: Card(
+              elevation: 0,
               margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(color: Colors.grey.shade200),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header (Invoice & Status)
+                  // Header Card
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                    padding: const EdgeInsets.all(14),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -250,7 +251,7 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                           children: [
                             Icon(
                               Icons.receipt_outlined,
-                              size: 16,
+                              size: 14,
                               color: Colors.grey.shade600,
                             ),
                             const SizedBox(width: 6),
@@ -259,7 +260,7 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey.shade700,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
@@ -299,46 +300,38 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                   ),
                   const Divider(
                     height: 1,
+                    thickness: 1,
                     color: Color(0xFFF1F5F9),
-                    thickness: 1.5,
                   ),
 
-                  // Body Card (Gambar & Info)
+                  // Body Card
                   Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Thumbnail Gambar
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              fotoUrl,
-                              fit: BoxFit.cover,
-                              headers: const {
-                                'ngrok-skip-browser-warning': 'true',
-                              },
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Center(
-                                  child: Icon(
-                                    Icons.broken_image,
-                                    color: Colors.grey,
-                                  ),
-                                );
-                              },
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            fotoUrl,
+                            width: 75,
+                            height: 75,
+                            fit: BoxFit.cover,
+                            headers: const {
+                              'ngrok-skip-browser-warning': 'true',
+                            },
+                            errorBuilder: (c, e, s) => Container(
+                              width: 75,
+                              height: 75,
+                              color: Colors.grey.shade100,
+                              child: const Icon(
+                                Icons.broken_image,
+                                color: Colors.grey,
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 16),
-
-                        // Detail Pesanan
+                        const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,30 +339,62 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                               Text(
                                 namaDestinasi,
                                 style: const TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.black87,
-                                  height: 1.2,
                                 ),
-                                maxLines: 2,
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '${item['jumlah_tiket']}x Tiket ${item['kategori_tiket'].toString().toUpperCase()}',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 13,
+                              if (namaKelas.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Kelas: $namaKelas',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.blueGrey,
+                                  ),
                                 ),
+                              ],
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.calendar_today_outlined,
+                                    size: 12,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Kunjungan: $tglKunjungan',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _formatRupiah(item['total_harga'] ?? 0),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F4C81),
-                                ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    '${item['jumlah_tiket']} Tiket',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatRupiah(item['total_harga'] ?? 0),
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0F4C81),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -378,86 +403,70 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                     ),
                   ),
 
-                  // Keterangan Penolakan (Khusus Tab Ditolak)
+                  // Alasan Penolakan
                   if (isDitolak && item['keterangan_admin'] != null)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
                       child: Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: Colors.red.shade50,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade100),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline,
-                                  size: 16,
-                                  color: Colors.red.shade700,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Alasan Penolakan:',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.red.shade700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              item['keterangan_admin'],
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.red.shade900,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'Alasan: ${item['keterangan_admin']}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red.shade900,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
 
-                  // Tombol Aksi Bawah (Upload Bukti)
-                  // Mencegah propagasi gesture ke card dengan memberikan event onPressed sendiri
+                  // Tombol Aksi Mandiri untuk Upload Bukti
                   if (isPending || isDitolak)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
                       child: SizedBox(
                         width: double.infinity,
-                        height: 45,
+                        height: 40,
                         child: ElevatedButton.icon(
                           onPressed: () {
+                            final metode =
+                                item['metode_pembayaran'] ??
+                                item['metodePembayaran'] ??
+                                {};
+
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => InstruksiCheckoutScreen(
                                   transaksiId: item['id'],
                                   totalHarga: item['total_harga'] ?? 0,
+                                  selectedMetode: metode,
                                 ),
                               ),
                             ).then((_) => _fetchData());
                           },
-                          icon: const Icon(Icons.upload_file, size: 18),
+                          icon: const Icon(Icons.upload_file, size: 16),
                           label: Text(
                             isDitolak
-                                ? 'Upload Ulang Bukti Transfer'
-                                : 'Upload Bukti Pembayaran',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                                ? 'Upload Ulang Bukti Bayar'
+                                : 'Bayar Sekarang / Upload Bukti',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0F4C81),
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
                             elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         ),
                       ),
@@ -472,7 +481,7 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
   }
 
   // ===========================================================================
-  // WIDGET LIST UNTUK TAB 4, 5 (TIKET DIGITAL FISIK)
+  // WIDGET LIST UNTUK TAB 4, 5 (TIKET AKTIF / TERPAKAI)
   // ===========================================================================
   Widget _buildListTiketDigital(List<dynamic> items, String tabType) {
     if (items.isEmpty) return _buildEmptyState();
@@ -484,11 +493,18 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
         padding: const EdgeInsets.all(16),
         itemCount: items.length,
         itemBuilder: (context, index) {
+          // Data langsung diambil dari root item karena query sekarang berasal dari TransaksiPlesir
           final tiket = items[index];
-          final transaksi = tiket['transaksi'] ?? {};
-          final String namaDestinasi = _getNamaDestinasi(transaksi);
-          final String fotoUrl = _getFotoDestinasi(tiket, isTiketDigital: true);
+          final String namaDestinasi = _getNamaDestinasi(tiket);
+          final String fotoUrl = _getFotoDestinasi(tiket);
           final bool isTerpakai = tabType == 'terpakai';
+
+          final String namaKelas = tiket['varian'] != null
+              ? tiket['varian']['nama_kelas'] ?? ''
+              : '';
+          final String tglKunjungan = tiket['tanggal_kunjungan'] != null
+              ? tiket['tanggal_kunjungan'].toString()
+              : '-';
 
           return GestureDetector(
             onTap: () {
@@ -497,31 +513,23 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                 MaterialPageRoute(
                   builder: (context) => DetailTiketPesananScreen(
                     data: tiket,
-                    isTiketDigital: true, // Karena ini List Tiket Digital
-                    tabType: tabType,
+                    tabType: tabType, // isTiketDigital telah dihapus
                   ),
                 ),
               ).then((_) => _fetchData());
             },
-            child: Container(
+            child: Card(
+              elevation: 0,
               margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(color: Colors.grey.shade200),
               ),
               child: Column(
                 children: [
-                  // Header (Status Tiket)
+                  // Header Card
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                    padding: const EdgeInsets.all(14),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -529,18 +537,18 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                           children: [
                             Icon(
                               Icons.confirmation_number_outlined,
-                              size: 16,
+                              size: 14,
                               color: isTerpakai
-                                  ? Colors.grey.shade600
+                                  ? Colors.grey
                                   : Colors.green.shade700,
                             ),
                             const SizedBox(width: 6),
                             Text(
                               isTerpakai
                                   ? 'TIKET SELESAI'
-                                  : 'TIKET SIAP DIGUNAKAN',
+                                  : 'TIKET AKTIF / SIAP DIGUNAKAN',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: isTerpakai
                                     ? Colors.grey.shade700
                                     : Colors.green.shade700,
@@ -549,9 +557,10 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                             ),
                           ],
                         ),
-                        if (isTerpakai && tiket['waktu_scan'] != null)
+                        // Informasi tanggal update jika transaksi sudah berstatus terpakai
+                        if (isTerpakai && tiket['updated_at'] != null)
                           Text(
-                            'Dipakai: ${tiket['waktu_scan'].toString().substring(0, 10)}',
+                            'Scan: ${tiket['updated_at'].toString().substring(0, 10)}',
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.grey.shade500,
@@ -562,46 +571,38 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                   ),
                   const Divider(
                     height: 1,
+                    thickness: 1,
                     color: Color(0xFFF1F5F9),
-                    thickness: 1.5,
                   ),
 
-                  // Body (Foto & Barcode/QR Text)
+                  // Body Card
                   Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Thumbnail Gambar
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              fotoUrl,
-                              fit: BoxFit.cover,
-                              headers: const {
-                                'ngrok-skip-browser-warning': 'true',
-                              },
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Center(
-                                  child: Icon(
-                                    Icons.broken_image,
-                                    color: Colors.grey,
-                                  ),
-                                );
-                              },
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            fotoUrl,
+                            width: 75,
+                            height: 75,
+                            fit: BoxFit.cover,
+                            headers: const {
+                              'ngrok-skip-browser-warning': 'true',
+                            },
+                            errorBuilder: (c, e, s) => Container(
+                              width: 75,
+                              height: 75,
+                              color: Colors.grey.shade100,
+                              child: const Icon(
+                                Icons.broken_image,
+                                color: Colors.grey,
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 16),
-
-                        // Detail Tiket Digital
+                        const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -609,29 +610,56 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                               Text(
                                 namaDestinasi,
                                 style: const TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.black87,
                                 ),
-                                maxLines: 2,
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
+                              ),
+                              if (namaKelas.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Kelas: $namaKelas',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.blueGrey,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.calendar_today_outlined,
+                                    size: 12,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Kunjungan: $tglKunjungan',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
-                                  vertical: 6,
+                                  vertical: 5,
                                 ),
                                 decoration: BoxDecoration(
                                   color: isTerpakai
                                       ? Colors.grey.shade100
                                       : Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
                                     color: isTerpakai
                                         ? Colors.grey.shade300
                                         : Colors.blue.shade100,
-                                    style: BorderStyle.solid,
                                   ),
                                 ),
                                 child: Row(
@@ -639,7 +667,7 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                                   children: [
                                     Icon(
                                       Icons.qr_code_scanner,
-                                      size: 16,
+                                      size: 14,
                                       color: isTerpakai
                                           ? Colors.grey.shade600
                                           : const Color(0xFF0F4C81),
@@ -648,9 +676,9 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                                     Text(
                                       tiket['kode_tiket'] ?? '-',
                                       style: TextStyle(
-                                        fontSize: 14,
+                                        fontSize: 13,
                                         fontWeight: FontWeight.bold,
-                                        letterSpacing: 1.5,
+                                        letterSpacing: 1,
                                         color: isTerpakai
                                             ? Colors.grey.shade600
                                             : const Color(0xFF0F4C81),
@@ -674,9 +702,6 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
     );
   }
 
-  // ===========================================================================
-  // WIDGET EMPTY STATE KETIKA LIST KOSONG
-  // ===========================================================================
   Widget _buildEmptyState() {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -694,16 +719,16 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
               ),
               child: const Icon(
                 Icons.receipt_long_outlined,
-                size: 80,
+                size: 70,
                 color: Colors.black26,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             const Text(
               'Belum ada tiket di kategori ini.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 color: Colors.black54,
                 fontWeight: FontWeight.w500,
               ),

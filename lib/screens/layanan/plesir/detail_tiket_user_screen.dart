@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:reang_app/models/tiket_wisata_model.dart';
 import 'package:reang_app/models/tiket_event_model.dart';
+import 'package:reang_app/providers/auth_provider.dart';
+import 'package:reang_app/screens/auth/login_screen.dart'; // Import LoginScreen
 import 'checkout_detail_screen.dart';
 
 class DetailTiketUserScreen extends StatefulWidget {
@@ -242,6 +245,39 @@ class _DetailTiketUserScreenState extends State<DetailTiketUserScreen> {
         );
       },
     );
+  }
+
+  // --- FUNGSI LANJUTAN SAAT TOMBOL "BELI TIKET" DIKLIK (SETELAH CEK LOGIN) ---
+  void _lanjutKeHalamanCheckout(
+    String title,
+    String location,
+    String finalPrice,
+    bool isWisata,
+  ) {
+    if (isWisata) {
+      // JIKA WISATA, LANGSUNG KE CHECKOUT KARENA TIDAK ADA VARIAN
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CheckoutDetailScreen(
+            targetId: widget.item.id!, // Kirim ID Wisata
+            kategoriTiket: 'wisata', // Kategori Wisata
+            title: title,
+            location: location,
+            price: finalPrice,
+            imageUrl: _allImages.isNotEmpty ? _allImages.first : '',
+          ),
+        ),
+      );
+    } else {
+      // JIKA EVENT, MUNCULKAN POP-UP PEMILIHAN VARIAN TIKET!
+      _showVariantSelectionBottomSheet(
+        context,
+        title,
+        location,
+        _allImages.isNotEmpty ? _allImages.first : '',
+      );
+    }
   }
 
   @override
@@ -667,37 +703,40 @@ class _DetailTiketUserScreenState extends State<DetailTiketUserScreen> {
                       child: ElevatedButton(
                         onPressed: isUnavailable
                             ? null
-                            : () {
-                                if (isWisata) {
-                                  // JIKA WISATA, LANGSUNG KE CHECKOUT KARENA TIDAK ADA VARIAN
-                                  Navigator.push(
+                            : () async {
+                                // 👇 LOGIKA CEK LOGIN DITERAPKAN DI SINI
+                                final authProvider = Provider.of<AuthProvider>(
+                                  context,
+                                  listen: false,
+                                );
+
+                                if (authProvider.isLoggedIn) {
+                                  // Jika sudah login, lanjut checkout
+                                  _lanjutKeHalamanCheckout(
+                                    title,
+                                    location,
+                                    finalPrice,
+                                    isWisata,
+                                  );
+                                } else {
+                                  // Jika belum login, arahkan ke layar login
+                                  final result = await Navigator.push<bool>(
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) =>
-                                          CheckoutDetailScreen(
-                                            targetId:
-                                                item.id!, // Kirim ID Wisata
-                                            kategoriTiket:
-                                                'wisata', // Kategori Wisata
-                                            title: title,
-                                            location: location,
-                                            price: finalPrice,
-                                            imageUrl: _allImages.isNotEmpty
-                                                ? _allImages.first
-                                                : '',
-                                          ),
+                                          const LoginScreen(popOnSuccess: true),
                                     ),
                                   );
-                                } else {
-                                  // JIKA EVENT, MUNCULKAN POP-UP PEMILIHAN VARIAN TIKET!
-                                  _showVariantSelectionBottomSheet(
-                                    context,
-                                    title,
-                                    location,
-                                    _allImages.isNotEmpty
-                                        ? _allImages.first
-                                        : '',
-                                  );
+
+                                  // Jika kembali dari halaman login dengan sukses (nilai true)
+                                  if (result == true && mounted) {
+                                    _lanjutKeHalamanCheckout(
+                                      title,
+                                      location,
+                                      finalPrice,
+                                      isWisata,
+                                    );
+                                  }
                                 }
                               },
                         style: ElevatedButton.styleFrom(
