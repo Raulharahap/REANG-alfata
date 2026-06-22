@@ -86,6 +86,61 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
     return '$domainHost/storage/$url';
   }
 
+  // =========================================================================
+  // 👇 FUNGSI BARU: VALIDASI METODE PEMBAYARAN SEBELUM BUAT TIKET
+  // =========================================================================
+  Future<void> _validasiDanPindahHalaman(Widget halamanTujuan) async {
+    final auth = context.read<AuthProvider>();
+    if (auth.token == null) return;
+
+    // 1. Tampilkan loading sebentar
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF005691)),
+      ),
+    );
+
+    // 2. Cek status pembayaran ke API
+    final bool isPaymentReady = await _apiService.checkMetodePembayaran(
+      auth.token!,
+    );
+
+    // 3. Tutup loading
+    if (mounted) Navigator.pop(context);
+
+    // 4. Cek Hasilnya
+    if (!isPaymentReady) {
+      if (mounted) {
+        showToast(
+          '⚠️ Peringatan!\nHarap isi Metode Pembayaran di menu Setting terlebih dahulu untuk bisa menerima uang pesanan.',
+          context: context,
+          position: StyledToastPosition.bottom,
+          backgroundColor: Colors.redAccent.shade700,
+          textStyle: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+          animation: StyledToastAnimation.scale,
+          reverseAnimation: StyledToastAnimation.fade,
+          animDuration: const Duration(milliseconds: 200),
+          duration: const Duration(seconds: 4),
+          borderRadius: BorderRadius.circular(15),
+          curve: Curves.fastOutSlowIn,
+        );
+      }
+    } else {
+      if (mounted) {
+        final refresh = await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => halamanTujuan),
+        );
+        if (refresh == true) _fetchData();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _filteredItems;
@@ -468,7 +523,7 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
     );
   }
 
-  // --- KODE EMPTY STATE DAN BOTTOM SHEET TETAP SAMA ---
+  // --- KODE EMPTY STATE ---
   Widget _buildEmptyStateContent(BuildContext context) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -641,6 +696,8 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                 style: TextStyle(fontSize: 13, color: Colors.grey),
               ),
               const SizedBox(height: 24),
+
+              // 👇 TOMBOL: Kategori Pariwisata / Wisata
               ListTile(
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -666,18 +723,14 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                   'Pantai, kolam renang, situs sejarah, museum, dll.',
                   style: TextStyle(fontSize: 12),
                 ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final refresh = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const FormInputWisata(),
-                    ),
-                  );
-                  if (refresh == true) _fetchData();
+                onTap: () {
+                  Navigator.pop(context); // Tutup bottom sheet
+                  _validasiDanPindahHalaman(const FormInputWisata());
                 },
               ),
               const SizedBox(height: 12),
+
+              // 👇 TOMBOL: Kategori Event / Acara
               ListTile(
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -703,15 +756,9 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                   'Konser, festival budaya, seminar, pameran, dll.',
                   style: TextStyle(fontSize: 12),
                 ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final refresh = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const FormInputEvent(),
-                    ),
-                  );
-                  if (refresh == true) _fetchData();
+                onTap: () {
+                  Navigator.pop(context); // Tutup bottom sheet
+                  _validasiDanPindahHalaman(const FormInputEvent());
                 },
               ),
               const SizedBox(height: 16),

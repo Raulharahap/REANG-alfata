@@ -53,7 +53,7 @@ class ApiService {
   // =======================================================================
   // Backend lokal
   final String _baseUrlBackend =
-      'https://aed7-2402-8780-103b-abc-154b-baf2-a16c-a7d3.ngrok-free.app/api';
+      'https://5b2c-2402-8780-103b-abc-154b-baf2-a16c-a7d3.ngrok-free.app/api';
 
   // =======================================================================
   // API BERITA (EKSTERNAL)
@@ -4354,6 +4354,26 @@ class ApiService {
       );
     } catch (e) {
       debugPrint("Gagal delete all notif: $e");
+    }
+  }
+
+  // ===========================================================================
+  // FUNGSI CEK STATUS METODE PEMBAYARAN MITRA
+  // ===========================================================================
+  Future<bool> checkMetodePembayaran(String token) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrlBackend/plesir/mitra/cek-pembayaran', // Sesuaikan URL dengan route Laravel
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data['has_payment'] ?? false;
+      }
+      return false;
+    } catch (e) {
+      debugPrint("Gagal cek metode pembayaran: $e");
+      return false; // Jika error, tahan user agar tidak bablas
     }
   }
 }
