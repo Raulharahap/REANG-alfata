@@ -272,10 +272,34 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
     final String title = isWisata ? item.namaWisata : item.namaEvent;
     final String location = isWisata ? item.alamat : item.lokasi;
     final String category = isWisata ? item.kategoriWisata : item.kategoriEvent;
-
-    // Gunakan fungsi URL Cerdas Anti-Error
     final String finalImageUrl = _getSmartImageUrl(item.fotoUtamaUrl);
-    final String status = item.isActive ? "Aktif" : "Non-Aktif";
+
+    // --- LOGIKA STATUS DAN EXPIRED (KADALUARSA) ---
+    bool isExpired = false;
+    if (!isWisata) {
+      try {
+        DateTime eventDate = DateTime.parse(item.tanggalEvent);
+        // Jika tanggal event sudah lewat hari ini, anggap berakhir
+        if (eventDate.add(const Duration(days: 1)).isBefore(DateTime.now())) {
+          isExpired = true;
+        }
+      } catch (e) {
+        // Abaikan jika format error
+      }
+    }
+
+    final bool isUnavailable = !item.isActive || isExpired;
+
+    String statusText = "Aktif";
+    Color statusColor = Colors.green;
+
+    if (!item.isActive) {
+      statusText = "Non-Aktif";
+      statusColor = Colors.red;
+    } else if (isExpired) {
+      statusText = "Berakhir";
+      statusColor = Colors.grey.shade700;
+    }
 
     // Ambil info spesifik (Harga untuk Wisata, Tanggal untuk Event)
     final String extraInfo = isWisata
@@ -328,20 +352,27 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                     ),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: Image.network(
-                    finalImageUrl,
-                    fit: BoxFit.cover,
-                    headers: const {'ngrok-skip-browser-warning': 'true'},
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const Center(child: CircularProgressIndicator());
-                    },
-                    errorBuilder: (c, e, s) => Container(
-                      color: Colors.grey.shade200,
-                      child: const Icon(
-                        Icons.broken_image,
-                        color: Colors.grey,
-                        size: 40,
+                  // 👇 FILTER GAMBAR GRAYSCALE JIKA TIDAK AKTIF / BERAKHIR
+                  child: ColorFiltered(
+                    colorFilter: ColorFilter.mode(
+                      isUnavailable ? Colors.grey : Colors.transparent,
+                      BlendMode.saturation,
+                    ),
+                    child: Image.network(
+                      finalImageUrl,
+                      fit: BoxFit.cover,
+                      headers: const {'ngrok-skip-browser-warning': 'true'},
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(child: CircularProgressIndicator());
+                      },
+                      errorBuilder: (c, e, s) => Container(
+                        color: Colors.grey.shade200,
+                        child: const Icon(
+                          Icons.broken_image,
+                          color: Colors.grey,
+                          size: 40,
+                        ),
                       ),
                     ),
                   ),
@@ -381,7 +412,7 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                   ),
                 ),
 
-                // Badge Status Kanan Atas
+                // Badge Status Kanan Atas (Berubah warna dinamis)
                 Positioned(
                   top: 12,
                   right: 12,
@@ -397,15 +428,10 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircleAvatar(
-                          radius: 4,
-                          backgroundColor: item.isActive
-                              ? Colors.green
-                              : Colors.red,
-                        ),
+                        CircleAvatar(radius: 4, backgroundColor: statusColor),
                         const SizedBox(width: 6),
                         Text(
-                          status,
+                          statusText,
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -432,10 +458,13 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                       Expanded(
                         child: Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
-                            color: Colors.black87,
+                            // Teks judul agak pudar jika tidak aktif
+                            color: isUnavailable
+                                ? Colors.grey.shade600
+                                : Colors.black87,
                             height: 1.2,
                           ),
                           maxLines: 2,
@@ -472,14 +501,22 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                         ),
                       ),
 
-                      Icon(extraIcon, size: 16, color: const Color(0xFF0D6EFD)),
+                      Icon(
+                        extraIcon,
+                        size: 16,
+                        color: isUnavailable
+                            ? Colors.grey
+                            : const Color(0xFF0D6EFD),
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           extraInfo,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF0D6EFD),
+                            color: isUnavailable
+                                ? Colors.grey
+                                : const Color(0xFF0D6EFD),
                             fontWeight: FontWeight.bold,
                           ),
                           maxLines: 1,
@@ -494,10 +531,12 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.location_on_outlined,
                         size: 16,
-                        color: Colors.redAccent,
+                        color: isUnavailable
+                            ? Colors.grey.shade400
+                            : Colors.redAccent,
                       ),
                       const SizedBox(width: 6),
                       Expanded(
