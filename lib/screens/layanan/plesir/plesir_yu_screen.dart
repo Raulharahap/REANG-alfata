@@ -45,22 +45,6 @@ class _PlesirYuScreenState extends State<PlesirYuScreen>
   int _adminPendingCount = 0;
   late AuthProvider _authProvider;
 
-  final List<PlesirModel> _dummyItems = [
-    PlesirModel(
-      id: 1,
-      judul: "Pantai Karang Song",
-      alamat: "Indramayu, Jawa Barat",
-      rating: 4.8,
-      foto:
-          "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=500",
-      deskripsi:
-          "Wisata hutan mangrove yang asri dengan pemandangan muara yang tenang serta udara pantai yang segar.",
-      latitude: "-6.3275",
-      longitude: "108.3247",
-      kategori: "Pantai",
-    ),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -480,18 +464,9 @@ class _PlesirYuScreenState extends State<PlesirYuScreen>
                 GestureDetector(
                   onTap: () => setState(() => _selectedTabIndex = 1),
                   child: _TabItem(
-                    icon: Icons.info_outline,
-                    title: 'Info Wisata',
-                    isActive: _selectedTabIndex == 1,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: () => setState(() => _selectedTabIndex = 2),
-                  child: _TabItem(
                     icon: Icons.confirmation_number_outlined,
                     title: 'Pesan Tiket',
-                    isActive: _selectedTabIndex == 2,
+                    isActive: _selectedTabIndex == 1,
                   ),
                 ),
               ],
@@ -505,14 +480,6 @@ class _PlesirYuScreenState extends State<PlesirYuScreen>
 
   Widget _buildBody() {
     if (_selectedTabIndex == 0) return _buildPariwisataBody();
-    if (_selectedTabIndex == 1) {
-      final currentItems = _cache[_dynamicFitur[_selectedFiturIndex]]?.items;
-      return InfoWisataScreen(
-        items: (currentItems == null || currentItems.isEmpty)
-            ? _dummyItems
-            : currentItems,
-      );
-    }
     return const PesanTiketScreen();
   }
 
@@ -537,9 +504,7 @@ class _PlesirYuScreenState extends State<PlesirYuScreen>
       );
     }
 
-    final displayItems = currentCache.items.isEmpty
-        ? _dummyItems
-        : currentCache.items;
+    final displayItems = currentCache.items;
 
     // Index 0 dialokasikan penuh untuk header komponen agar ikut ter-scroll
     int headerCount = 1;

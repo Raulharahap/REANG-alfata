@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_styled_toast/flutter_styled_toast.dart'; // 👇 Import Toast Pembatalan
 import 'package:reang_app/providers/auth_provider.dart';
 import 'package:reang_app/services/api_service.dart';
 import 'package:reang_app/screens/layanan/plesir/instruksi_checkout_screen.dart';
@@ -49,6 +50,105 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
       debugPrint("Gagal memuat tiket saya: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // =========================================================================
+  // 👇 FUNGSI INTERSEPTOR: POP-UP KONFIRMASI DAN PROSES PEMBATALAN KE API
+  // =========================================================================
+  Future<void> _konfirmasiBatalPesanan(
+    BuildContext context,
+    int transaksiId,
+  ) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              SizedBox(width: 8),
+              Text(
+                "Batalkan Pesanan?",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ],
+          ),
+          content: const Text(
+            "Apakah Anda yakin ingin membatalkan pesanan tiket ini? Tindakan ini tidak dapat dikembalikan.",
+            style: TextStyle(color: Colors.black87),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text(
+                "Tidak",
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                "Ya, Batalkan",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => const Center(
+          child: CircularProgressIndicator(color: Colors.redAccent),
+        ),
+      );
+
+      try {
+        final token = context.read<AuthProvider>().token;
+        if (token != null) {
+          await _apiService.cancelPesananPlesir(token, transaksiId);
+          if (mounted) Navigator.pop(context); // Tutup Loading Spinner
+
+          showToast(
+            "Pesanan berhasil dibatalkan",
+            context: context,
+            backgroundColor: Colors.green,
+            position: StyledToastPosition.bottom,
+            borderRadius: BorderRadius.circular(10),
+          );
+
+          _fetchData(); // Tarik ulang data real-time dari database
+        }
+      } catch (e) {
+        if (mounted) Navigator.pop(context); // Tutup Loading Spinner
+        showToast(
+          e.toString().replaceAll('Exception: ', ''),
+          context: context,
+          backgroundColor: Colors.red,
+          position: StyledToastPosition.bottom,
+          borderRadius: BorderRadius.circular(10),
+        );
+      }
     }
   }
 
@@ -224,10 +324,8 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => DetailTiketPesananScreen(
-                    data: item,
-                    tabType: tabType, // isTiketDigital telah dihapus
-                  ),
+                  builder: (context) =>
+                      DetailTiketPesananScreen(data: item, tabType: tabType),
                 ),
               ).then((_) => _fetchData());
             },
@@ -425,51 +523,147 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                       ),
                     ),
 
-                  // Tombol Aksi Mandiri untuk Upload Bukti
+                  // =========================================================================
+                  // 👇 RESTRUKTURISASI TOMBOL: MEMBUAT TOMBOL BATAL & BAYAR BERDAMPINGAN
+                  // =========================================================================
                   if (isPending || isDitolak)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 40,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            final metode =
-                                item['metode_pembayaran'] ??
-                                item['metodePembayaran'] ??
-                                {};
+                      child: isPending
+                          ? Row(
+                              children: [
+                                // --- TOMBOL CANCEL (HANYA DI TAB PENDING) ---
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 40,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _konfirmasiBatalPesanan(
+                                        context,
+                                        item['id'],
+                                      ),
+                                      icon: const Icon(
+                                        Icons.cancel_outlined,
+                                        size: 16,
+                                        color: Colors.redAccent,
+                                      ),
+                                      label: const Text(
+                                        'Cancel',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.redAccent,
+                                        ),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        side: const BorderSide(
+                                          color: Colors.redAccent,
+                                        ),
+                                        foregroundColor: Colors.redAccent,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // --- TOMBOL BAYAR SEKARANG ---
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 40,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () {
+                                        final metode =
+                                            item['metode_pembayaran'] ??
+                                            item['metodePembayaran'] ??
+                                            {};
 
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => InstruksiCheckoutScreen(
-                                  transaksiId: item['id'],
-                                  totalHarga: item['total_harga'] ?? 0,
-                                  selectedMetode: metode,
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                InstruksiCheckoutScreen(
+                                                  transaksiId: item['id'],
+                                                  totalHarga:
+                                                      item['total_harga'] ?? 0,
+                                                  selectedMetode: metode,
+                                                ),
+                                          ),
+                                        ).then((_) => _fetchData());
+                                      },
+                                      icon: const Icon(
+                                        Icons.upload_file,
+                                        size: 16,
+                                      ),
+                                      label: const Text(
+                                        'Bayar Sekarang',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFF0F4C81,
+                                        ),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : SizedBox(
+                              width: double.infinity,
+                              height: 40,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  final metode =
+                                      item['metode_pembayaran'] ??
+                                      item['metodePembayaran'] ??
+                                      {};
+
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          InstruksiCheckoutScreen(
+                                            transaksiId: item['id'],
+                                            totalHarga:
+                                                item['total_harga'] ?? 0,
+                                            selectedMetode: metode,
+                                          ),
+                                    ),
+                                  ).then((_) => _fetchData());
+                                },
+                                icon: const Icon(Icons.upload_file, size: 16),
+                                label: Text(
+                                  isDitolak
+                                      ? 'Upload Ulang Bukti Bayar'
+                                      : 'Bayar Sekarang / Upload Bukti',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0F4C81),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
                               ),
-                            ).then((_) => _fetchData());
-                          },
-                          icon: const Icon(Icons.upload_file, size: 16),
-                          label: Text(
-                            isDitolak
-                                ? 'Upload Ulang Bukti Bayar'
-                                : 'Bayar Sekarang / Upload Bukti',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
                             ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0F4C81),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
                     ),
                 ],
               ),
@@ -493,7 +687,6 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
         padding: const EdgeInsets.all(16),
         itemCount: items.length,
         itemBuilder: (context, index) {
-          // Data langsung diambil dari root item karena query sekarang berasal dari TransaksiPlesir
           final tiket = items[index];
           final String namaDestinasi = _getNamaDestinasi(tiket);
           final String fotoUrl = _getFotoDestinasi(tiket);
@@ -511,10 +704,8 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => DetailTiketPesananScreen(
-                    data: tiket,
-                    tabType: tabType, // isTiketDigital telah dihapus
-                  ),
+                  builder: (context) =>
+                      DetailTiketPesananScreen(data: tiket, tabType: tabType),
                 ),
               ).then((_) => _fetchData());
             },
@@ -557,7 +748,6 @@ class _TiketSayaScreenState extends State<TiketSayaScreen> {
                             ),
                           ],
                         ),
-                        // Informasi tanggal update jika transaksi sudah berstatus terpakai
                         if (isTerpakai && tiket['updated_at'] != null)
                           Text(
                             'Scan: ${tiket['updated_at'].toString().substring(0, 10)}',

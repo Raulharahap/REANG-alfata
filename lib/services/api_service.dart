@@ -53,7 +53,7 @@ class ApiService {
   // =======================================================================
   // Backend lokal
   final String _baseUrlBackend =
-      'https://bd2d-2402-8780-103b-abc-6134-414b-3311-5aba.ngrok-free.app/api';
+      'https://b6d5-2402-8780-103b-abc-55fa-84f-959a-eef0.ngrok-free.app/api';
 
   // =======================================================================
   // API BERITA (EKSTERNAL)
@@ -3520,10 +3520,9 @@ class ApiService {
     required String token,
     required int tiketId,
     required TiketWisataModel data,
-    XFile? fotoUtamaBaru, // Nullable, diisi jika user ganti foto
-    List<XFile>? galeriBaru, // Nullable, diisi jika user nambah foto galeri
-    List<int>?
-    idsFotoGaleriDihapus, // Array ID foto lama yang mau dihapus di DB
+    XFile? fotoUtamaBaru,
+    List<XFile>? galeriBaru,
+    List<int>? idsFotoGaleriDihapus,
   }) async {
     try {
       Map<String, dynamic> payload = {
@@ -3532,10 +3531,14 @@ class ApiService {
         'deskripsi': data.deskripsi,
         'alamat': data.alamat,
         'jam_operasional': data.jamOperasional,
-        'harga_tiket': data.hargaTiket,
-        'kuota_per_hari': data.kuotaPerHari,
-        'fasilitas': data.fasilitas,
+        'harga_tiket': data.hargaTiket.toString(),
+        'kuota_per_hari': data.kuotaPerHari.toString(),
       };
+
+      // 👇 PERBAIKAN 1: Kirim List/Array Fasilitas dengan format spesifik agar PHP/Laravel paham
+      for (int i = 0; i < data.fasilitas.length; i++) {
+        payload['fasilitas[$i]'] = data.fasilitas[i];
+      }
 
       // Jika user upload foto UTAMA baru
       if (fotoUtamaBaru != null) {
@@ -3545,25 +3548,25 @@ class ApiService {
         );
       }
 
-      // Jika user nambah foto GALERI baru
+      // 👇 PERBAIKAN 2: Kirim List Foto Galeri Baru dengan format spesifik
       if (galeriBaru != null && galeriBaru.isNotEmpty) {
-        List<MultipartFile> galeriMultipart = [];
-        for (var file in galeriBaru) {
-          galeriMultipart.add(
-            await MultipartFile.fromFile(file.path, filename: file.name),
+        for (int i = 0; i < galeriBaru.length; i++) {
+          payload['galeri_foto[$i]'] = await MultipartFile.fromFile(
+            galeriBaru[i].path,
+            filename: galeriBaru[i].name,
           );
         }
-        payload['galeri_foto'] = galeriMultipart;
       }
 
-      // Jika user menghapus foto galeri lama (Kirim array ID)
+      // 👇 PERBAIKAN 3: Kirim Array ID Hapus dengan format spesifik
       if (idsFotoGaleriDihapus != null && idsFotoGaleriDihapus.isNotEmpty) {
-        payload['hapus_galeri'] = idsFotoGaleriDihapus;
+        for (int i = 0; i < idsFotoGaleriDihapus.length; i++) {
+          payload['hapus_galeri[$i]'] = idsFotoGaleriDihapus[i].toString();
+        }
       }
 
       FormData formData = FormData.fromMap(payload);
 
-      // Pakai POST sesuai route Laravel: /wisata/update/{id}
       final response = await _dio.post(
         '$_baseUrlBackend/plesir/wisata/update/$tiketId',
         data: formData,
@@ -3572,7 +3575,27 @@ class ApiService {
 
       return TiketWisataModel.fromJson(response.data['data']);
     } on DioException catch (e) {
-      throw Exception(e.response?.data['message'] ?? "Gagal update tiket");
+      // 👇 PERBAIKAN 4: Pembaca Error Pintar (Menarik pesan asli dari Laravel)
+      String errorMessage = "Gagal mengupdate tiket";
+
+      if (e.response != null && e.response?.data is Map) {
+        final responseData = e.response!.data;
+        errorMessage = responseData['message'] ?? errorMessage;
+
+        // Tarik detail error validasi dari Laravel (jika ada)
+        if (responseData['errors'] != null) {
+          final errors = responseData['errors'] as Map<String, dynamic>;
+          final firstError = errors.values.first;
+          if (firstError is List && firstError.isNotEmpty) {
+            errorMessage = "$errorMessage\n${firstError[0]}";
+          }
+        }
+      } else {
+        errorMessage = "Error Server (${e.response?.statusCode})";
+        debugPrint("Error Server Asli: ${e.response?.data}");
+      }
+
+      throw Exception(errorMessage);
     }
   }
 
@@ -4374,6 +4397,26 @@ class ApiService {
     } catch (e) {
       debugPrint("Gagal cek metode pembayaran: $e");
       return false; // Jika error, tahan user agar tidak bablas
+    }
+  }
+
+  // =========================================================================
+  // BATALKAN PESANAN TIKET PLESIR
+  // =========================================================================
+  Future<bool> cancelPesananPlesir(String token, int transaksiId) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrlBackend/plesir/transaksi/cancel/$transaksiId',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      String errorMessage = "Gagal membatalkan pesanan";
+      if (e.response != null && e.response?.data is Map) {
+        errorMessage = e.response?.data['message'] ?? errorMessage;
+      }
+      throw Exception(errorMessage);
     }
   }
 }

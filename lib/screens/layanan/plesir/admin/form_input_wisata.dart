@@ -10,8 +10,7 @@ import 'package:reang_app/services/api_service.dart';
 import 'package:reang_app/models/tiket_wisata_model.dart';
 
 class FormInputWisata extends StatefulWidget {
-  final TiketWisataModel?
-  wisata; // Tambahkan ini agar bisa menerima data untuk Mode Edit
+  final TiketWisataModel? wisata;
 
   const FormInputWisata({super.key, this.wisata});
 
@@ -60,7 +59,6 @@ class _FormInputWisataState extends State<FormInputWisata> {
     super.initState();
     _isEditMode = widget.wisata != null;
 
-    // Isi Controller dengan data lama (Jika Edit) atau kosong (Jika Tambah)
     _namaController = TextEditingController(
       text: widget.wisata?.namaWisata ?? '',
     );
@@ -74,7 +72,6 @@ class _FormInputWisataState extends State<FormInputWisata> {
       text: widget.wisata?.jamOperasional ?? '',
     );
 
-    // Fasilitas dari List<String> diubah jadi string pisah koma
     _fasilitasController = TextEditingController(
       text: widget.wisata?.fasilitas != null
           ? widget.wisata!.fasilitas.join(', ')
@@ -114,7 +111,7 @@ class _FormInputWisataState extends State<FormInputWisata> {
       if (image != null) {
         setState(() {
           _fotoUtama = image;
-          _fotoUtamaLamaUrl = null; // Reset foto lama jika pilih baru
+          _fotoUtamaLamaUrl = null;
           _fotoError = false;
         });
       }
@@ -678,7 +675,7 @@ class _FormInputWisataState extends State<FormInputWisata> {
                         ),
                         child: isFotoLama
                             ? Image.network(
-                                _galeriFotoLama[index].fotoUrl ?? '',
+                                _galeriFotoLama[index].fotoUrl,
                                 fit: BoxFit.cover,
                                 headers: const {
                                   'ngrok-skip-browser-warning': 'true',
@@ -715,7 +712,12 @@ class _FormInputWisataState extends State<FormInputWisata> {
                           onTap: () {
                             setState(() {
                               if (isFotoLama) {
-                                _hapusGaleriIds.add(_galeriFotoLama[index].id!);
+                                // 👇 PERBAIKAN: Gunakan toString() pada penampungan ID hapus
+                                if (_galeriFotoLama[index].id != null) {
+                                  _hapusGaleriIds.add(
+                                    _galeriFotoLama[index].id!,
+                                  );
+                                }
                                 _galeriFotoLama.removeAt(index);
                               } else {
                                 _galeriFotoBaru.removeAt(
